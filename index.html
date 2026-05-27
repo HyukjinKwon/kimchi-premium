@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="description" content="Real-time Kimchi Premium tracker — compare crypto prices between Korean exchanges (Upbit, Bithumb) and global exchanges (Binance, Coinbase)">
+<meta name="keywords" content="kimchi premium, 김치프리미엄, 김프, upbit, bithumb, binance, bitcoin price, crypto arbitrage">
+<meta property="og:title" content="Kimchi Premium — Real-time Crypto Price Comparison">
+<meta property="og:description" content="Live kimchi premium tracker: Upbit vs Binance, Bithumb vs Binance, Coinbase premium">
+<title>Kimchi Premium — 김치프리미엄</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- NAV -->
+  <nav id="topNav">
+    <a class="nav-brand" href="/">🌶 Kimchi Premium</a>
+    <div class="nav-links">
+      <a href="#" class="active">Exchanges</a>
+      <a href="#charts" @click.prevent="showCharts = !showCharts">Charts</a>
+    </div>
+    <div class="nav-right">
+      <span style="font-size:11px;color:#888;margin-right:4px">
+        <span class="status-dot" :class="status.upbit"></span>Upbit
+        <span class="status-dot" :class="status.binance" style="margin-left:6px"></span>Binance
+        <span class="status-dot" :class="status.bithumb" style="margin-left:6px"></span>Bithumb
+      </span>
+      <button class="btn-night" @click="nightMode = !nightMode">
+        {{ nightMode ? '☀️ Day' : '🌙 Night' }}
+      </button>
+    </div>
+  </nav>
+
+  <!-- TOP INFO BAR -->
+  <div id="topBar">
+    <div class="top-item">
+      <span>💵 USD/KRW</span>
+      <span class="val">{{ usdKrw ? usdKrw.toLocaleString(undefined,{maximumFractionDigits:0}) : '--' }}₩</span>
+    </div>
+    <div class="top-item">
+      <span>💴 JPY/KRW</span>
+      <span class="val">{{ jpyKrw ? jpyKrw.toFixed(2) : '--' }}₩</span>
+    </div>
+    <div class="top-item">
+      <span>₮ USDT/KRW</span>
+      <span class="val">{{ usdtKrwPrice ? usdtKrwPrice.toLocaleString(undefined,{maximumFractionDigits:0}) : '--' }}₩</span>
+    </div>
+    <div class="top-item">
+      <span>₿ BTC Dominance</span>
+      <span class="val">{{ btcDominance }}%</span>
+    </div>
+    <div class="top-item">
+      <span>🏦 Coinbase Premium</span>
+      <span class="val" :class="coinbaseUsdPremium > 0 ? 'pos' : coinbaseUsdPremium < 0 ? 'neg' : ''">
+        {{ typeof coinbaseUsdPremium === 'number' ? fmtPremium(coinbaseUsdPremium) : coinbaseUsdPremium }}
+      </span>
+    </div>
+  </div>
+
+  <div class="main-container">
+
+    <!-- CHARTS SECTION (collapsible) -->
+    <div class="chart-section" v-show="showCharts">
+      <h3>Market Charts</h3>
+      <div class="chart-grid">
+        <div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">BTC Dominance</div>
+          <div id="domichart" class="chart-box"></div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Upbit BTC/KRW ÷ Binance BTC/USDT</div>
+          <div id="kimchichart" class="chart-box"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BTC PREMIUM HERO CARD -->
+    <div class="premium-card" v-if="btcRow">
+      <div class="ex-block">
+        <img src="https://cdn.upbit.com/upbit-web/images/upbit_favicon.ico" class="ex-logo" onerror="this.style.display='none'">
+        <div>
+          <div class="ex-name">Upbit (KRW)</div>
+          <div class="ex-price">{{ fmtKrw(btcRow.upbitPrice) }}₩</div>
+          <div class="ex-sub">${{ fmtUsd(btcRow.upbitPrice / usdKrw) }}</div>
+        </div>
+      </div>
+
+      <span class="premium-sign">−</span>
+
+      <div class="ex-block">
+        <img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" class="ex-logo" onerror="this.style.display='none'">
+        <div>
+          <div class="ex-name">Binance (USDT→KRW)</div>
+          <div class="ex-price">{{ fmtKrw(btcRow.binanceKrw) }}₩</div>
+          <div class="ex-sub">${{ fmtUsd(btcRow.binancePrice) }}</div>
+        </div>
+      </div>
+
+      <span class="premium-sign">=</span>
+
+      <div class="premium-result">
+        <div class="label">Kimchi Premium</div>
+        <div class="pct" :class="premiumClass(btcRow.pct)">
+          {{ fmtPremium(btcRow.pct) }}
+        </div>
+        <div class="krw" :class="premiumClass(btcRow.gap)">
+          {{ btcRow.gap >= 0 ? '+' : '' }}{{ fmtKrw(btcRow.gap) }}₩
+        </div>
+      </div>
+
+      <!-- BTC change -->
+      <div style="margin-left:auto;text-align:right">
+        <div class="ex-name">24h change</div>
+        <div style="font-size:16px;font-weight:700" :class="pctClass(btcRow.change)">
+          {{ fmtPct(btcRow.change * 100) }}
+        </div>
+      </div>
+    </div>
+
+    <!-- LOADING STATE -->
+    <div class="premium-card" v-else style="justify-content:center;color:var(--text-muted)">
+      Connecting to exchanges…
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+      <button class="ctrl-btn" :class="{active: !showFavOnly}" @click="showFavOnly=false">All</button>
+      <button class="ctrl-btn" :class="{active: showFavOnly}" @click="showFavOnly=true">⭐ Favorites</button>
+      <button class="ctrl-btn" :class="{active: showFilter}" @click="showFilter=!showFilter">🔍 Filter</button>
+      <button class="ctrl-btn" :class="{active: showCharts}" @click="showCharts=!showCharts">📈 Charts</button>
+      <input class="search-input" v-model="searchStr" placeholder="Search coin…" />
+    </div>
+
+    <!-- PAIR SELECTOR TABS -->
+    <div class="tab-bar">
+      <button class="tab-btn" :class="{active: activePair==='upbit-binance'}" @click="activePair='upbit-binance'">
+        Upbit / Binance
+      </button>
+      <button class="tab-btn" :class="{active: activePair==='bithumb-binance'}" @click="activePair='bithumb-binance'">
+        Bithumb / Binance
+      </button>
+      <button class="tab-btn" :class="{active: activePair==='upbit-coinbase'}" @click="activePair='upbit-coinbase'">
+        Upbit / Coinbase
+      </button>
+    </div>
+
+    <!-- COIN TABLE -->
+    <div class="pair-section">
+      <div class="pair-header">
+        <div>
+          <span class="pair-name">
+            {{ activePair === 'upbit-binance' ? 'Upbit (Criterion) vs Binance (Target)' :
+               activePair === 'bithumb-binance' ? 'Bithumb (Criterion) vs Binance (Target)' :
+               'Upbit (Criterion) vs Coinbase (Target)' }}
+          </span>
+          <span class="pair-sub" style="margin-left:8px">{{ rows.length }} coins</span>
+        </div>
+      </div>
+
+      <table class="coin-table">
+        <thead>
+          <tr>
+            <th style="width:120px" @click="setSort('symbol')">
+              Coin <span class="sort-icon" :class="{sorted: sortKey==='symbol'}">{{ sortIcon('symbol') }}</span>
+            </th>
+            <th @click="setSort('krwPrice')" class="hide-mobile">
+              {{ activePair.startsWith('upbit') ? 'Upbit' : 'Bithumb' }}(₩)
+              <span class="sort-icon" :class="{sorted: sortKey==='krwPrice'}">{{ sortIcon('krwPrice') }}</span>
+            </th>
+            <th @click="setSort('usdPrice')">
+              {{ activePair.endsWith('coinbase') ? 'Coinbase' : 'Binance' }}($)
+              <span class="sort-icon" :class="{sorted: sortKey==='usdPrice'}">{{ sortIcon('usdPrice') }}</span>
+            </th>
+            <th @click="setSort('binanceKrw')" class="hide-mobile">
+              Target(₩)
+              <span class="sort-icon" :class="{sorted: sortKey==='binanceKrw'}">{{ sortIcon('binanceKrw') }}</span>
+            </th>
+            <th @click="setSort('change')">
+              Change(%)
+              <span class="sort-icon" :class="{sorted: sortKey==='change'}">{{ sortIcon('change') }}</span>
+            </th>
+            <th @click="setSort('volume')" class="hide-mobile">
+              Volume(억)
+              <span class="sort-icon" :class="{sorted: sortKey==='volume'}">{{ sortIcon('volume') }}</span>
+            </th>
+            <th @click="setSort('gap')" class="hide-mobile">
+              Premium(₩)
+              <span class="sort-icon" :class="{sorted: sortKey==='gap'}">{{ sortIcon('gap') }}</span>
+            </th>
+            <th @click="setSort('pct')">
+              Premium(%)
+              <span class="sort-icon" :class="{sorted: sortKey==='pct'}">{{ sortIcon('pct') }}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="rows.length === 0">
+            <td colspan="8" style="text-align:center;color:var(--text-muted);padding:40px">
+              Waiting for data…
+            </td>
+          </tr>
+          <tr v-for="row in rows" :key="row.symbol" :class="row.upDown ? 'flash-'+row.upDown : ''">
+            <td>
+              <div class="coin-cell">
+                <button class="fav-btn" :class="{on: row.isFav}" @click="toggleFav(row.symbol)">⭐</button>
+                <img :src="coinIcon(row.symbol)" class="coin-icon" @error="onImgError">
+                <span class="coin-symbol">{{ row.symbol }}</span>
+              </div>
+            </td>
+            <td class="hide-mobile" :class="row.upDown === 'up' ? 'td-up' : row.upDown === 'down' ? 'td-down' : ''">
+              {{ fmtKrw(row.krwPrice) }}
+            </td>
+            <td :class="row.binanceUpDown === 'up' ? 'td-up' : row.binanceUpDown === 'down' ? 'td-down' : ''">
+              {{ fmtUsd(row.usdPrice) }}
+            </td>
+            <td class="hide-mobile">{{ fmtKrw(row.binanceKrw) }}</td>
+            <td :class="pctClass(row.change)">{{ fmtPct(row.change * 100) }}</td>
+            <td class="hide-mobile">{{ row.volume ? row.volume.toFixed(0) : '--' }}</td>
+            <td class="hide-mobile" :class="premiumClass(row.gap)">
+              {{ row.gap ? (row.gap >= 0 ? '+' : '') + fmtKrw(row.gap) : '--' }}
+            </td>
+            <td class="premium-cell" :class="premiumClass(row.pct)">
+              {{ fmtPremium(row.pct) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="text-align:center;padding:24px 0;color:var(--text-muted);font-size:12px">
+      Real-time data from Upbit, Bithumb, Binance, Coinbase · Exchange rate from open.er-api.com<br>
+      <span style="margin-top:4px;display:block">Prices update via WebSocket · For reference only, not financial advice</span>
+    </div>
+
+  </div><!-- /main-container -->
+
+  <!-- ALARM PANEL -->
+  <div class="alarm-panel" :class="{open: showAlarm}">
+    <h4>⏰ Alarms</h4>
+    <div v-if="alarms.length === 0" style="color:var(--text-muted);font-size:12px">No alarms set.</div>
+    <div class="alarm-item" v-for="alarm in alarms" :key="alarm.id">
+      <span>{{ alarm.symbol }} {{ alarm.type }} {{ alarm.dir }} {{ alarm.threshold }}</span>
+      <button class="alarm-del" @click="removeAlarm(alarm.id)">×</button>
+    </div>
+    <div style="margin-top:12px">
+      <button class="ctrl-btn" @click="showAlarm=false">Close</button>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Vue 3 -->
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<!-- TradingView -->
+<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+<script src="js/exchanges.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+// Mount TradingView charts when showCharts becomes true
+// We watch via a MutationObserver on #domichart visibility
+let tvDomi = null, tvKimchi = null;
+function mountCharts() {
+  if (!tvDomi && document.getElementById('domichart')) {
+    tvDomi = new TradingView.widget({
+      autosize: true,
+      symbol: 'CRYPTOCAP:BTC.D',
+      interval: '1D',
+      timezone: 'Asia/Seoul',
+      theme: document.body.classList.contains('night') ? 'Dark' : 'Light',
+      style: '1',
+      locale: 'en',
+      toolbar_bg: '#f1f3f6',
+      enable_publishing: false,
+      container_id: 'domichart',
+    });
+  }
+  if (!tvKimchi && document.getElementById('kimchichart')) {
+    tvKimchi = new TradingView.widget({
+      autosize: true,
+      symbol: 'UPBIT:BTCKRW/BINANCE:BTCUSDT',
+      interval: '1D',
+      timezone: 'Asia/Seoul',
+      theme: document.body.classList.contains('night') ? 'Dark' : 'Light',
+      style: '1',
+      locale: 'en',
+      toolbar_bg: '#f1f3f6',
+      enable_publishing: false,
+      container_id: 'kimchichart',
+    });
+  }
+}
+// Observe DOM for chart section visibility
+const obs = new MutationObserver(() => {
+  if (document.getElementById('domichart')?.offsetParent) mountCharts();
+});
+obs.observe(document.body, { attributes: true, childList: true, subtree: true });
+</script>
+</body>
+</html>
