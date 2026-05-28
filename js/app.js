@@ -706,7 +706,7 @@ createApp({
         if (d.status !== 'ok' || !Array.isArray(d.items) || !d.items.length) throw new Error('empty');
         return d.items.slice(0, 6).map(item => ({
           id: item.guid || item.link, title: item.title, url: item.link,
-          published_on: Math.floor(new Date(item.pubDate).getTime() / 1000),
+          published_on: Math.floor(new Date(item.pubDate.replace(' ', 'T') + 'Z').getTime() / 1000),
         }));
       }
 

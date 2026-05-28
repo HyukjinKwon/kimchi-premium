@@ -326,7 +326,7 @@
     <div class="news-panel" v-show="showNews">
       <div class="chat-sidebar-header" style="font-size:12px">
         📰 Crypto News
-        <span v-if="newsUpdatedAt" style="font-size:10px;color:var(--text-muted);font-weight:normal;margin-left:6px">{{ newsUpdatedAt }}</span>
+        <span v-if="newsUpdatedAt" style="font-size:10px;color:var(--text-muted);font-weight:normal;margin-left:6px">Updated at {{ newsUpdatedAt }}</span>
       </div>
       <div class="news-list">
         <div v-if="newsStatus === 'loading'" class="news-empty">Loading...</div>
