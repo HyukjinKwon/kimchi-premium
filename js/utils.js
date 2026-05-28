@@ -72,11 +72,12 @@ function fmtLiqPrice(n) {
 }
 
 function newsAge(ts) {
-  const mins = Math.floor((Date.now() / 1000 - ts) / 60);
-  if (mins < 60) return mins + 'm';
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + 'h';
-  return Math.floor(hrs / 24) + 'd';
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays >= 1) return diffDays + 'd';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function coinIcon(symbol) {

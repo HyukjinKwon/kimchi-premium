@@ -485,6 +485,12 @@ createApp({
           });
           if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
         });
+      } else if (event === 'binance-prices') {
+        Object.entries(data).forEach(([symbol, price]) => {
+          if (!prices[symbol]) prices[symbol] = {};
+          if (!prices[symbol].binancePrice) prices[symbol].binancePrice = price;
+        });
+        updateUsdtKrw();
       } else if (event === 'coinbase-premium') {
         coinbaseUsdPremium.value = data;
       }

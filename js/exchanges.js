@@ -187,6 +187,21 @@ const ExchangeManager = (() => {
     } catch(e) { return []; }
   }
 
+  // Lightweight: prices only (148 KB vs 1.76 MB for 24hr). Used for fast initial table render.
+  async function fetchBinancePrices() {
+    try {
+      const r = await fetch('https://api.binance.com/api/v3/ticker/price');
+      const list = await r.json();
+      const data = {};
+      list.forEach(t => {
+        if (!t.symbol.endsWith('USDT')) return;
+        data[t.symbol.slice(0, -4)] = parseFloat(t.price);
+      });
+      return data;
+    } catch(e) { return {}; }
+  }
+
+  // Full 24hr stats (change %, volume, high, low). Heavy — loaded in background.
   async function fetchBinanceMarkets() {
     try {
       const r = await fetch('https://api.binance.com/api/v3/ticker/24hr');
@@ -264,48 +279,53 @@ const ExchangeManager = (() => {
     fetchExchangeRate();
     fetchGlobal();
 
-    // Show cached BTC dominance immediately while fetchGlobal is in flight
     try {
       const cachedDom = localStorage.getItem('btcDominance');
       if (cachedDom) {
         const n = parseFloat(cachedDom);
-        if (Number.isFinite(n) && n >= 0 && n <= 100) {
-          emit('global', { btcDominance: n.toFixed(1) });
-        }
+        if (Number.isFinite(n) && n >= 0 && n <= 100) emit('global', { btcDominance: n.toFixed(1) });
       }
     } catch(e) {}
 
-    // Show priority rows immediately while full market data loads
+    // Pre-announce priority symbols so the table renders immediately
     emit('symbols', PRIORITY_SYMS);
 
-    // Fire all fetches in parallel:
-    //   - priority Upbit + Binance data (small, fast)
-    //   - full market symbol lists (larger, slower)
-    const [upbitSymbols, binanceData] = await Promise.all([
+    // Fire all fast requests in parallel:
+    //   fetchBinancePriority  ~50ms  5KB   → favorites get price+change+volume right away
+    //   fetchUpbitTickers(10) ~20ms  15KB  → favorites get KRW price right away
+    //   fetchBinancePrices    ~100ms 148KB → all symbols get price (unlocks premiums for full table)
+    //   fetchUpbitMarkets     ~30ms  56KB  → full symbol list
+    const [upbitSymbols, binancePrices] = await Promise.all([
       fetchUpbitMarkets(),
-      fetchBinanceMarkets(),
+      fetchBinancePrices(),
       fetchAndStreamUpbitTickers(PRIORITY_SYMS),
       fetchBinancePriority(PRIORITY_SYMS),
     ]);
+    // At this point (~100ms): favorites are already visible with premium.
+    // Now unlock the full table using the lightweight price data.
 
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
       ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
        'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
 
-    const binanceSet = new Set(Object.keys(binanceData));
-    const commonSymbols = defaultSymbols.filter(s => binanceSet.has(s));
+    const binancePriceSet = new Set(Object.keys(binancePrices));
+    const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);
+    // Price-only: sets binancePrice without clobbering change/volume already set for priority coins
+    emit('binance-prices', binancePrices);
 
-    // Full Binance batch (updates/replaces priority data too)
-    const binanceUpdates = commonSymbols
-      .filter(s => binanceData[s])
-      .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
-    if (binanceUpdates.length) emit('binance-batch', binanceUpdates);
-
-    // Fetch remaining non-priority symbols' Upbit prices (fire and forget)
+    // Stream remaining Upbit prices in background (priority batch already done)
     const prioritySet = new Set(PRIORITY_SYMS);
     const remaining = commonSymbols.filter(s => !prioritySet.has(s));
     if (remaining.length) fetchAndStreamUpbitTickers(remaining);
+
+    // Load heavy 24hr stats in background — updates change %, volume, high, low
+    fetchBinanceMarkets().then(binanceData => {
+      const updates = commonSymbols
+        .filter(s => binanceData[s])
+        .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
+      if (updates.length) emit('binance-batch', updates);
+    });
 
     connectUpbit(defaultSymbols);
     connectBinance();
