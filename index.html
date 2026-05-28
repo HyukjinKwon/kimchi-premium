@@ -167,8 +167,11 @@
           <img src="https://www.google.com/s2/favicons?domain=upbit.com&sz=32" class="ex-logo" onerror="this.style.display='none'">
           <div>
             <div class="ex-name">Upbit (KRW)</div>
-            <div class="ex-price">{{ fmtKrw(btcRow.krwPrice) }}₩</div>
-            <div class="ex-sub">${{ fmtUsd(btcRow.krwPrice / usdKrw) }}</div>
+            <template v-if="btcRow.krwPrice">
+              <div class="ex-price">{{ fmtKrw(btcRow.krwPrice) }}₩</div>
+              <div class="ex-sub">${{ fmtUsd(btcRow.krwPrice / usdKrw) }}</div>
+            </template>
+            <div v-else style="padding:4px 0"><span class="cell-spinner"></span></div>
           </div>
         </div>
 
@@ -188,20 +191,22 @@
 
       <div class="premium-result">
         <div class="label">Kimchi Premium</div>
-        <div class="pct" :class="premiumClass(btcRow.pct)">
-          {{ fmtPremium(btcRow.pct) }}
-        </div>
-        <div class="krw" :class="premiumClass(btcRow.gap)">
-          {{ fmtKrwGap(btcRow.gap) }}₩
-        </div>
+        <template v-if="btcRow.krwPrice">
+          <div class="pct" :class="premiumClass(btcRow.pct)">{{ fmtPremium(btcRow.pct) }}</div>
+          <div class="krw" :class="premiumClass(btcRow.gap)">{{ fmtKrwGap(btcRow.gap) }}₩</div>
+        </template>
+        <span v-else class="cell-spinner"></span>
       </div>
 
       <!-- BTC change -->
       <div style="margin-left:auto;text-align:right">
         <div class="ex-name">24h change</div>
-        <div style="font-size:16px;font-weight:700" :class="pctClass(btcRow.change)">
-          {{ fmtPct(btcRow.change * 100) }}
-        </div>
+        <template v-if="btcRow.krwPrice">
+          <div style="font-size:16px;font-weight:700" :class="pctClass(btcRow.change)">
+            {{ fmtPct(btcRow.change * 100) }}
+          </div>
+        </template>
+        <span v-else class="cell-spinner"></span>
       </div>
     </div>
 
@@ -491,8 +496,8 @@
 <!-- TradingView — SRI omitted: tv.js has no version pin and auto-updates -->
 <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 <script src="js/utils.js?v=5"></script>
-<script src="js/exchanges.js?v=8"></script>
+<script src="js/exchanges.js?v=9"></script>
 <script src="js/charts.js?v=5"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

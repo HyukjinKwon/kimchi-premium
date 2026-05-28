@@ -297,20 +297,6 @@ const ExchangeManager = (() => {
       }
     } catch(e) {}
 
-    try {
-      const raw = localStorage.getItem('upbitPrices');
-      const cachedAt = parseInt(localStorage.getItem('upbitPricesCachedAt') || '0');
-      if (raw && Date.now() - cachedAt < 10 * 60 * 1000) {
-        const prices = JSON.parse(raw);
-        if (prices && typeof prices === 'object') {
-          Object.entries(prices).forEach(([sym, data]) => {
-            state.upbit[sym] = data;
-            emit('upbit', { symbol: sym, data, prev: null });
-          });
-        }
-      }
-    } catch(e) {}
-
     // Return visits: show full cached symbol list instantly (t=0)
     // First visit: show priority coins while we fetch
     let cachedSymbols = null;
@@ -335,11 +321,10 @@ const ExchangeManager = (() => {
 
     if (!cachedSymbols) emit('symbols', defaultSymbols);
 
-    // Single request for all Upbit tickers — no batching, no parallel 429s
-    const [binancePrices] = await Promise.all([
-      binancePricesP,
-      fetchAllUpbitTickers(defaultSymbols),
-    ]);
+    // Fire Binance prices as soon as they arrive — don't wait for Upbit.
+    // Table shows immediately with Binance columns; Upbit cells show spinners until REST completes.
+    const upbitP = fetchAllUpbitTickers(defaultSymbols);
+    const binancePrices = await binancePricesP;
     const binancePriceSet = new Set(Object.keys(binancePrices));
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);
@@ -351,15 +336,7 @@ const ExchangeManager = (() => {
       try { localStorage.setItem('commonSymbols', JSON.stringify(commonSymbols)); } catch(e) {}
     }
 
-    // Persist Upbit prices so returning users see them at t=0 (no REST wait).
-    try {
-      const snapshot = {};
-      Object.entries(state.upbit).forEach(([sym, data]) => { snapshot[sym] = data; });
-      if (Object.keys(snapshot).length > 50) {
-        localStorage.setItem('upbitPrices', JSON.stringify(snapshot));
-        localStorage.setItem('upbitPricesCachedAt', Date.now().toString());
-      }
-    } catch(e) {}
+    await upbitP;
 
     // Load heavy 24hr stats in background — updates change %, volume, high, low
     fetchBinanceMarkets().then(binanceData => {

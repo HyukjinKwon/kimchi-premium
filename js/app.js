@@ -360,7 +360,7 @@ createApp({
     const rows = computed(() => {
       let syms = allSymbols.value.filter(s => {
         const p = prices[s];
-        return p && p.upbitPrice > 0 && p.binancePrice > 0;
+        return p && p.binancePrice > 0;
       });
 
       if (showFavOnly.value) syms = syms.filter(s => favCoins.value.has(s));
@@ -371,11 +371,11 @@ createApp({
 
       return syms.map(s => {
         const p = prices[s];
-        const krwPrice = p.upbitPrice;
+        const krwPrice = p.upbitPrice || 0;
         const usdPrice = p.binancePrice;
         const binanceKrw = usdKrw.value ? usdPrice * usdKrw.value : 0;
-        const gap = binanceKrw ? krwPrice - binanceKrw : 0;
-        const pct = binanceKrw ? gap / binanceKrw * 100 : 0;
+        const gap = (krwPrice && binanceKrw) ? krwPrice - binanceKrw : 0;
+        const pct = (krwPrice && binanceKrw) ? gap / binanceKrw * 100 : 0;
         const top20Rank = top20.value[s] ?? null;
         return {
           symbol: s,
