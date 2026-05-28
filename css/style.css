@@ -530,22 +530,22 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
 /* Nickname badge in chat header */
 .chat-nick-wrap { display: flex; align-items: center; }
 .chat-nick-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: #2CA5E0;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: 4px;
   white-space: nowrap;
-  max-width: 90px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .chat-nick-badge:hover { background: rgba(44,165,224,0.12); }
 .chat-nick-edit {
-  width: 90px;
-  font-size: 11px;
-  padding: 2px 6px;
+  width: 160px;
+  font-size: 12px;
+  padding: 3px 8px;
   border: 1px solid #2CA5E0;
   border-radius: 4px;
   background: var(--bg);
