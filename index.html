@@ -206,7 +206,7 @@
               Upbit(₩)
               <span class="sort-icon" :class="{sorted: sortKey==='krwPrice'}">{{ sortIcon('krwPrice') }}</span>
             </th>
-            <th @click="setSort('usdPrice')" class="hide-mobile">
+            <th @click="setSort('usdPrice')">
               Binance($)
               <span class="sort-icon" :class="{sorted: sortKey==='usdPrice'}">{{ sortIcon('usdPrice') }}</span>
             </th>
@@ -247,7 +247,7 @@
               <td :class="[row.upDown === 'up' ? 'td-up' : row.upDown === 'down' ? 'td-down' : '', row.upDown ? 'flash-'+row.upDown : '']">
                 {{ fmtKrw(row.krwPrice) }}
               </td>
-              <td class="hide-mobile" :class="[row.binanceUpDown === 'up' ? 'td-up' : row.binanceUpDown === 'down' ? 'td-down' : '', row.binanceUpDown ? 'flash-'+row.binanceUpDown : '']">
+              <td :class="[row.binanceUpDown === 'up' ? 'td-up' : row.binanceUpDown === 'down' ? 'td-down' : '', row.binanceUpDown ? 'flash-'+row.binanceUpDown : '']">
                 {{ fmtUsd(row.usdPrice) }}
               </td>
               <td class="hide-mobile">{{ fmtKrw(row.binanceKrw) }}</td>

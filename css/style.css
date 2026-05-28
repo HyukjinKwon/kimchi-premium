@@ -355,9 +355,14 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
   .premium-card .ex-price { font-size: 16px; }
   .premium-result .pct { font-size: 22px; }
 
-  /* Coin table */
+  /* Coin table — 5 visible columns on mobile, keep it tight */
   .nav-links { display: none; }
-  table.coin-table th, table.coin-table td { padding: 6px 6px; font-size: 11px; }
+  table.coin-table th, table.coin-table td { padding: 4px 3px; font-size: 10px; }
+  table.coin-table th:first-child { width: 70px !important; }
+  .coin-icon { width: 16px; height: 16px; }
+  .coin-symbol { font-size: 11px; }
+  .coin-cell { gap: 3px; }
+  .fav-btn { font-size: 11px; }
   .hide-mobile { display: none; }
 
   /* Search input */
