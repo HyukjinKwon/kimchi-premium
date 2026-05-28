@@ -131,6 +131,22 @@ createApp({
     }
 
     const _chatLimiter = createRateLimiter();
+    let _countdownTimer = null;
+
+    function startCountdown(seconds) {
+      chatError.value = `너무 많은 메시지입니다. ${seconds}초 후에 다시 시도하세요.`;
+      clearInterval(_countdownTimer);
+      let remaining = seconds;
+      _countdownTimer = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(_countdownTimer);
+          chatError.value = '';
+        } else {
+          chatError.value = `너무 많은 메시지입니다. ${remaining}초 후에 다시 시도하세요.`;
+        }
+      }, 1000);
+    }
 
     async function sendChatMessage() {
       const text = chatInput.value.trim();
@@ -138,7 +154,7 @@ createApp({
 
       const limit = _chatLimiter.try();
       if (!limit.ok) {
-        chatError.value = `너무 많은 메시지입니다. ${limit.retryAfter}초 후에 다시 시도하세요.`;
+        startCountdown(limit.retryAfter);
         return;
       }
 
