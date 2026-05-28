@@ -687,11 +687,11 @@ createApp({
     async function fetchNews() {
       newsStatus.value = 'loading';
 
-      // Primary: CryptoCompare v1 (no API key needed, returns array directly)
+      // Primary: CryptoCompare Korean news
       try {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 6000);
-        const r = await fetch('https://min-api.cryptocompare.com/data/news/?lang=EN', { signal: ctrl.signal });
+        const r = await fetch('https://min-api.cryptocompare.com/data/news/?lang=KR', { signal: ctrl.signal });
         clearTimeout(tid);
         if (r.ok) {
           const d = await r.json();
@@ -708,10 +708,11 @@ createApp({
         }
       } catch(e) {}
 
-      // Fallback: rss2json proxy for RSS feeds
+      // Fallback: Korean crypto news RSS feeds
       const RSS_FEEDS = [
-        'https://cointelegraph.com/rss',
-        'https://coindesk.com/arc/outboundfeeds/rss/',
+        'https://www.tokenpost.kr/rss',
+        'https://blockmedia.co.kr/feed',
+        'https://coinreaders.com/rssfeed.php',
       ];
       for (const feed of RSS_FEEDS) {
         try {
