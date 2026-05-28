@@ -287,37 +287,44 @@ const ExchangeManager = (() => {
       }
     } catch(e) {}
 
-    // Pre-announce priority symbols so the table renders immediately
-    emit('symbols', PRIORITY_SYMS);
+    // Return visits: show full cached symbol list instantly (t=0)
+    // First visit: show priority coins while we fetch
+    let cachedSymbols = null;
+    try {
+      const s = JSON.parse(localStorage.getItem('commonSymbols') || 'null');
+      if (Array.isArray(s) && s.length) cachedSymbols = s;
+    } catch(e) {}
+    emit('symbols', cachedSymbols || PRIORITY_SYMS);
 
-    // Fire all fast requests in parallel:
-    //   fetchBinancePriority  ~50ms  5KB   → favorites get price+change+volume right away
-    //   fetchUpbitTickers(10) ~20ms  15KB  → favorites get KRW price right away
-    //   fetchBinancePrices    ~100ms 148KB → all symbols get price (unlocks premiums for full table)
-    //   fetchUpbitMarkets     ~30ms  56KB  → full symbol list
-    const [upbitSymbols, binancePrices] = await Promise.all([
-      fetchUpbitMarkets(),
-      fetchBinancePrices(),
-      fetchAndStreamUpbitTickers(PRIORITY_SYMS),
-      fetchBinancePriority(PRIORITY_SYMS),
-    ]);
-    // At this point (~100ms): favorites are already visible with premium.
-    // Now unlock the full table using the lightweight price data.
+    // Priority coins: fire-and-forget, don't block init on these
+    fetchAndStreamUpbitTickers(PRIORITY_SYMS);  // ~20ms, 15KB
+    fetchBinancePriority(PRIORITY_SYMS);         // ~50ms,  5KB
 
+    // Start both slow fetches in parallel but handle them independently
+    const upbitMarketsP = fetchUpbitMarkets();   // ~30ms,  56KB
+    const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB ← former bottleneck
+
+    // As soon as Upbit markets arrive (~30ms), start streaming remaining Upbit
+    // prices and expand the table — don't wait for the 148KB Binance file
+    const upbitSymbols = await upbitMarketsP;
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
       ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
        'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
 
+    const prioritySet = new Set(PRIORITY_SYMS);
+    const remainingAll = defaultSymbols.filter(s => !prioritySet.has(s));
+    if (!cachedSymbols) emit('symbols', defaultSymbols); // first visit: expand table early
+    if (remainingAll.length) fetchAndStreamUpbitTickers(remainingAll); // ~20ms per batch
+
+    // Now wait for Binance prices — needed for premiums and to trim non-Binance symbols
+    const binancePrices = await binancePricesP;
     const binancePriceSet = new Set(Object.keys(binancePrices));
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);
-    // Price-only: sets binancePrice without clobbering change/volume already set for priority coins
     emit('binance-prices', binancePrices);
 
-    // Stream remaining Upbit prices in background (priority batch already done)
-    const prioritySet = new Set(PRIORITY_SYMS);
-    const remaining = commonSymbols.filter(s => !prioritySet.has(s));
-    if (remaining.length) fetchAndStreamUpbitTickers(remaining);
+    // Cache for next visit so the full table renders at t=0
+    try { localStorage.setItem('commonSymbols', JSON.stringify(commonSymbols)); } catch(e) {}
 
     // Load heavy 24hr stats in background — updates change %, volume, high, low
     fetchBinanceMarkets().then(binanceData => {
