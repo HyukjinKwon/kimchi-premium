@@ -286,13 +286,17 @@
                   <div class="trades-panel">
                     <div class="trades-header">{{ chartExchange === 'upbit' ? 'Upbit' : 'Binance' }} Trades</div>
                     <div class="trades-list">
-                      <div v-if="recentTrades.length === 0" class="trades-empty">Connecting...</div>
+                      <div v-if="recentTrades.length < 10" class="trades-empty">
+                        <div class="loading-spinner" style="margin:0 auto"></div>
+                      </div>
+                      <template v-else>
                       <div v-for="t in recentTrades" :key="t.id"
                            class="trade-item" :class="t.isBuy ? 'trade-buy' : 'trade-sell'">
                         <span class="trade-price">{{ chartExchange === 'upbit' ? fmtKrw(t.price) : fmtTradePrice(t.price) }}</span>
                         <span class="trade-qty">{{ fmtTradeQty(t.qty) }}</span>
                         <span class="trade-time">{{ t.time.toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}) }}</span>
                       </div>
+                      </template>
                     </div>
                   </div>
                   <div id="coin-chart-container" class="coin-chart-pane"></div>

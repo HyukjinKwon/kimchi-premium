@@ -506,9 +506,10 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
   overflow: hidden;
 }
 .trades-empty {
-  padding: 12px 10px;
-  font-size: 11px;
-  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 .trade-item {
   display: grid;
@@ -803,7 +804,7 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
 
 
 /* STATUS DOT */
-.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; vertical-align: middle; }
 .status-dot.connected { background: #4caf50; }
 .status-dot.disconnected { background: #f44336; }
 .status-dot.connecting { background: #ff9800; }
