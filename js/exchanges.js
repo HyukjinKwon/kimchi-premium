@@ -223,17 +223,21 @@ const ExchangeManager = (() => {
     } catch(e) { return {}; }
   }
 
-  // Fetch Upbit tickers in parallel batches of 20, emitting each batch as it arrives
+  // Fetch Upbit tickers in parallel batches of 100 (Upbit's max per request).
+  // Batches of 20 with ~240 remaining symbols = 12 simultaneous requests, which
+  // exceeds Upbit's ~10 req/s quotation rate limit and causes silent 429 failures.
   async function fetchAndStreamUpbitTickers(symbols) {
     const batches = [];
-    for (let i = 0; i < symbols.length; i += 20)
-      batches.push(symbols.slice(i, i + 20));
+    for (let i = 0; i < symbols.length; i += 100)
+      batches.push(symbols.slice(i, i + 100));
 
     await Promise.all(batches.map(async batch => {
       try {
         const markets = batch.map(s => `KRW-${s}`).join(',');
         const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(markets)}`);
+        if (!r.ok) return;
         const list = await r.json();
+        if (!Array.isArray(list)) return;
         list.forEach(t => {
           const sym = t.market.replace('KRW-', '');
           const d = {
