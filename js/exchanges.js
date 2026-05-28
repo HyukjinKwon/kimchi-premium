@@ -107,7 +107,6 @@ const ExchangeManager = (() => {
     };
 
     ws.onclose = () => {
-      if (ws !== state.ws.upbit) return; // intentionally replaced, skip reconnect
       state.status.upbit = 'disconnected';
       emit('status', state.status);
       setTimeout(() => connectUpbit(symbols), backoff(_upbitAttempt++));
@@ -280,36 +279,6 @@ const ExchangeManager = (() => {
 
   const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','TON','SUI','LINK'];
 
-  // Loads the full symbol list, bulk prices, and WebSocket connections in background.
-  // upbitMarketsP and binancePricesP are passed in so they start at t=0 alongside
-  // the priority fetches, not after init() resolves.
-  async function _loadAllSymbols(upbitMarketsP, binancePricesP, cachedSymbols) {
-    const upbitSymbols = await upbitMarketsP;
-    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
-      ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
-       'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
-
-    const prioritySet = new Set(PRIORITY_SYMS);
-    const remainingAll = defaultSymbols.filter(s => !prioritySet.has(s));
-    if (!cachedSymbols) emit('symbols', defaultSymbols);
-    if (remainingAll.length) fetchAndStreamUpbitTickers(remainingAll);
-    connectUpbit(defaultSymbols);
-
-    const binancePrices = await binancePricesP;
-    const binancePriceSet = new Set(Object.keys(binancePrices));
-    const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
-    emit('symbols', commonSymbols);
-    emit('binance-prices', binancePrices);
-    try { localStorage.setItem('commonSymbols', JSON.stringify(commonSymbols)); } catch(e) {}
-
-    fetchBinanceMarkets().then(binanceData => {
-      const updates = commonSymbols
-        .filter(s => binanceData[s])
-        .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
-      if (updates.length) emit('binance-batch', updates);
-    });
-  }
-
   async function init() {
     fetchExchangeRate();
     fetchGlobal();
@@ -322,6 +291,8 @@ const ExchangeManager = (() => {
       }
     } catch(e) {}
 
+    // Return visits: show full cached symbol list instantly (t=0)
+    // First visit: show priority coins while we fetch
     let cachedSymbols = null;
     try {
       const s = JSON.parse(localStorage.getItem('commonSymbols') || 'null');
@@ -329,20 +300,49 @@ const ExchangeManager = (() => {
     } catch(e) {}
     emit('symbols', cachedSymbols || PRIORITY_SYMS);
 
-    // Start background fetches immediately so they run in parallel with priority
-    const upbitMarketsP = fetchUpbitMarkets();
-    const binancePricesP = fetchBinancePrices();
+    // Priority coins: fire-and-forget, don't block init on these
+    fetchAndStreamUpbitTickers(PRIORITY_SYMS);  // ~20ms, 15KB
+    fetchBinancePriority(PRIORITY_SYMS);         // ~50ms,  5KB
 
-    // Wait only for favorites — init() resolves as soon as top coins are ready
-    await Promise.all([
-      fetchAndStreamUpbitTickers(PRIORITY_SYMS),
-      fetchBinancePriority(PRIORITY_SYMS),
-    ]);
+    // Start both slow fetches in parallel but handle them independently
+    const upbitMarketsP = fetchUpbitMarkets();   // ~30ms,  56KB
+    const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB ← former bottleneck
 
-    // Favorites loaded. Everything else streams in the background.
+    // As soon as Upbit markets arrive (~30ms), start streaming remaining Upbit
+    // prices and expand the table — don't wait for the 148KB Binance file
+    const upbitSymbols = await upbitMarketsP;
+    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
+      ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
+       'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
+
+    const prioritySet = new Set(PRIORITY_SYMS);
+    const remainingAll = defaultSymbols.filter(s => !prioritySet.has(s));
+    if (!cachedSymbols) emit('symbols', defaultSymbols); // first visit: expand table early
+    if (remainingAll.length) fetchAndStreamUpbitTickers(remainingAll); // ~20ms per batch
+
+    // Now wait for Binance prices — needed for premiums and to trim non-Binance symbols
+    const binancePrices = await binancePricesP;
+    const binancePriceSet = new Set(Object.keys(binancePrices));
+    const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
+    emit('symbols', commonSymbols);
+    emit('binance-prices', binancePrices);
+
+    // Cache for next visit so the full table renders at t=0
+    try { localStorage.setItem('commonSymbols', JSON.stringify(commonSymbols)); } catch(e) {}
+
+    // Load heavy 24hr stats in background — updates change %, volume, high, low
+    fetchBinanceMarkets().then(binanceData => {
+      const updates = commonSymbols
+        .filter(s => binanceData[s])
+        .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
+      if (updates.length) emit('binance-batch', updates);
+    });
+
+    connectUpbit(defaultSymbols);
     connectBinance();
     fetchCoinbasePrice();
-    _loadAllSymbols(upbitMarketsP, binancePricesP, cachedSymbols);
+
+    return defaultSymbols;
   }
 
   return { init, on, state };
