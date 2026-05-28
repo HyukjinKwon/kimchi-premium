@@ -182,6 +182,7 @@ const ExchangeManager = (() => {
   async function fetchUpbitMarkets(retry = 4) {
     try {
       const r = await fetch('https://api.upbit.com/v1/market/all?isDetails=false');
+      if (r.status === 429) return [];
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       return d.filter(m => m.market.startsWith('KRW-')).map(m => m.market.replace('KRW-', ''));
@@ -235,6 +236,7 @@ const ExchangeManager = (() => {
     try {
       const markets = symbols.map(s => `KRW-${s}`).join(',');
       const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(markets)}`);
+      if (r.status === 429) return;
       if (!r.ok) throw new Error(r.status);
       const list = await r.json();
       if (!Array.isArray(list)) throw new Error('bad response');
