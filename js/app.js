@@ -106,14 +106,16 @@ createApp({
 
     const onlineCount = ref(0);
 
+    // Stable session ID used by both chat and prediction
+    const _sessionId = sessionStorage.getItem('chatSession') || Math.random().toString(36).slice(2);
+    sessionStorage.setItem('chatSession', _sessionId);
+
     function initChat() {
       try {
         const db = getDb();
 
         // ── Presence tracking ──────────────────────────────────────────────
-        // Use a per-tab session ID so each open tab counts separately
-        const sessionId = sessionStorage.getItem('chatSession') || Math.random().toString(36).slice(2);
-        sessionStorage.setItem('chatSession', sessionId);
+        const sessionId = _sessionId;
 
         db.ref('.info/connected').on('value', (snap) => {
           if (!snap.val()) return;
@@ -140,6 +142,194 @@ createApp({
         });
       } catch(e) { console.error('[Chat] init failed:', e); }
     }
+
+    // ── Prediction system ─────────────────────────────────────────────────────
+    const predSymbol    = ref('BTC');
+    const predPrice     = ref('');
+    const predBet       = ref('');
+    const predSubmitting = ref(false);
+    const predError     = ref('');
+    const predPending   = ref(null); // { symbol, targetPrice, targetTs, bet }
+    const predCountdown = ref('');
+    const predScore     = reactive({ correct: 0, tries: 0, points: 10, ts: 0 });
+    const predRank      = ref(null);
+    let _predResolveTimer = null;
+    let _predCountdownInterval = null;
+
+    const chatDisplayName = computed(() => {
+      const rank = predRank.value ? ` #${predRank.value}` : '';
+      return `${chatName.value} (${predScore.points}p${rank})`;
+    });
+
+    function startCountdownTicker() {
+      clearInterval(_predCountdownInterval);
+      _predCountdownInterval = setInterval(() => {
+        if (!predPending.value) { predCountdown.value = ''; clearInterval(_predCountdownInterval); return; }
+        const rem = predPending.value.targetTs - Date.now();
+        if (rem <= 0) { predCountdown.value = '확인 중...'; return; }
+        const m = Math.floor(rem / 60000);
+        const s = Math.floor((rem % 60000) / 1000);
+        predCountdown.value = `${m}분 ${String(s).padStart(2, '0')}초 후 확인`;
+      }, 1000);
+    }
+
+    async function postSystemMessage(text, textBold) {
+      try {
+        const db = getDb();
+        const msg = { from: chatDisplayName.value, emoji: chatEmoji.value, text, ts: firebase.database.ServerValue.TIMESTAMP, isPrediction: true };
+        if (textBold) msg.textBold = textBold;
+        await db.ref('messages').push(msg);
+      } catch(e) {}
+    }
+
+    async function resolvePrediction() {
+      console.log('[Pred] resolvePrediction called, pending:', predPending.value);
+      if (!predPending.value) return;
+      const { symbol, targetPrice, bet = 0 } = predPending.value;
+      predPending.value = null;
+      clearTimeout(_predResolveTimer);
+      clearInterval(_predCountdownInterval);
+      predCountdown.value = '';
+
+      const actualPrice = prices[symbol]?.binancePrice;
+      console.log('[Pred] actualPrice for', symbol, ':', actualPrice);
+      if (!actualPrice) {
+        predError.value = `결과 오류: ${symbol} 가격 없음`;
+        setTimeout(() => { predError.value = ''; }, 5000);
+        return;
+      }
+
+      const hit = Math.abs(actualPrice - targetPrice) / targetPrice <= 0.005;
+      const rawChange = hit ? bet * 2 : -bet;
+      if (hit) predScore.correct++;
+      const pointsBefore = predScore.points;
+      predScore.points = Math.max(10, predScore.points + rawChange);
+      const actualChange = predScore.points - pointsBefore;
+
+      const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      const earnStr = hit ? `+${actualChange}p 획득 (3x)` : `${actualChange}p 손실`;
+      const resultText = hit
+        ? `${chatEmoji.value} ${chatDisplayName.value} 적중! ${symbol} 예측 $${fmt(targetPrice)} ±0.5% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`
+        : `${chatEmoji.value} ${chatDisplayName.value} 실패. ${symbol} 예측 $${fmt(targetPrice)} ±0.5% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`;
+      const resultBold = `${earnStr} → 총 ${predScore.points}p`;
+
+      predError.value = `${resultText} ${resultBold}`;
+      setTimeout(() => { predError.value = ''; }, 8000);
+
+      try {
+        const db = getDb();
+        await db.ref(`scores/${_sessionId}`).update({ correct: predScore.correct, tries: predScore.tries, points: predScore.points, ts: Date.now() });
+        await db.ref(`predictions/${_sessionId}`).remove();
+        await postSystemMessage(resultText, resultBold);
+      } catch(e) { console.error('[Pred] Firebase error:', e); }
+    }
+
+    function schedulePredictionResolve(targetTs) {
+      clearTimeout(_predResolveTimer);
+      _predResolveTimer = setTimeout(resolvePrediction, Math.max(0, targetTs - Date.now()));
+    }
+
+    function initPrediction() {
+      try {
+        const db = getDb();
+        db.ref(`scores/${_sessionId}`).once('value', snap => {
+          const d = snap.val();
+          if (d) { predScore.correct = d.correct || 0; predScore.tries = d.tries || 0; predScore.points = d.points || 10; predScore.ts = d.ts || 0; }
+        });
+        db.ref('settings/pointsReset').on('value', snap => {
+          const d = snap.val();
+          if (!d || d.ts <= predScore.ts) return;
+          predScore.points = d.points;
+          predScore.correct = 0;
+          predScore.tries = 0;
+          predScore.ts = d.ts;
+          try { db.ref(`scores/${_sessionId}`).set({ points: d.points, correct: 0, tries: 0, ts: d.ts }); } catch(e) {}
+        });
+        db.ref(`predictions/${_sessionId}`).once('value', snap => {
+          const d = snap.val();
+          if (d) {
+            predPending.value = { symbol: d.symbol, targetPrice: d.targetPrice, targetTs: d.targetTs, bet: d.bet || 0 };
+            schedulePredictionResolve(d.targetTs);
+            startCountdownTicker();
+          }
+        });
+        db.ref('scores').on('value', snap => {
+          const data = snap.val() || {};
+          const list = Object.entries(data)
+            .map(([id, s]) => ({ id, points: s.points || 0, tries: s.tries || 0 }))
+            .filter(s => s.tries > 0 && s.points > 10)
+            .sort((a, b) => b.points - a.points || a.tries - b.tries);
+          const idx = list.findIndex(s => s.id === _sessionId);
+          predRank.value = idx >= 0 ? idx + 1 : null;
+        });
+      } catch(e) {}
+    }
+
+    watch(predRank, (newRank, oldRank) => {
+      if (newRank === 1 && oldRank !== 1) {
+        predError.value = '🏆 1등이 되었습니다! 다른 사용자의 메시지를 삭제할 수 있습니다.';
+        setTimeout(() => { predError.value = ''; }, 5000);
+      }
+    });
+
+    async function submitPrediction() {
+      const sym = predSymbol.value.trim().toUpperCase();
+      const target = parseFloat(predPrice.value);
+      const bet = Math.min(parseInt(predBet.value) || 0, predScore.points);
+      if (!sym || !target || target <= 0 || bet <= 0) return;
+      if (parseInt(predBet.value) > predScore.points) {
+        predError.value = `배팅은 보유 포인트(${predScore.points}p)를 초과할 수 없습니다.`;
+        setTimeout(() => { predError.value = ''; }, 3000);
+        return;
+      }
+      if (predPending.value) {
+        predError.value = `이미 예측 중입니다. ${predCountdown.value}`;
+        setTimeout(() => { predError.value = ''; }, 3000);
+        return;
+      }
+
+      predSubmitting.value = true;
+      predScore.tries++;
+      const targetTs = Date.now() + 60 * 60 * 1000;
+      predPending.value = { symbol: sym, targetPrice: target, targetTs, bet };
+      schedulePredictionResolve(targetTs);
+      startCountdownTicker();
+      predPrice.value = '';
+      predBet.value = '';
+      predSubmitting.value = false;
+
+      try {
+        const db = getDb();
+        await db.ref(`predictions/${_sessionId}`).set({ symbol: sym, targetPrice: target, targetTs, bet });
+        await db.ref(`scores/${_sessionId}`).update({ correct: predScore.correct, tries: predScore.tries, points: predScore.points, ts: Date.now() });
+        const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        await postSystemMessage(`${chatEmoji.value} ${chatDisplayName.value} — ${sym} 1시간 후 $${fmt(target)} 예측 | 배팅 ${bet}p`);
+      } catch(e) {}  // Firebase errors don't cancel the local prediction
+    }
+
+    function checkPrediction(symbol) {
+      if (!predPending.value || predPending.value.symbol !== symbol) return;
+      if (Date.now() >= predPending.value.targetTs) resolvePrediction();
+    }
+
+    async function resetAllPoints() {
+      if (predScore.points <= 1000000) return;
+      try {
+        const db = getDb();
+        await db.ref('settings/pointsReset').set({ ts: Date.now(), points: 10 });
+        await postSystemMessage(`🔄 ${chatDisplayName.value}이(가) 모든 사용자의 포인트를 10p로 초기화했습니다.`);
+      } catch(e) { console.error('[Reset] failed:', e); }
+    }
+
+    async function deleteMessage(messageId) {
+      if (predRank.value !== 1) return;
+      try {
+        const db = getDb();
+        await db.ref(`messages/${messageId}`).update({ deleted: true, deletedBy: chatDisplayName.value });
+      } catch(e) {}
+    }
+
+    // ── /Prediction system ────────────────────────────────────────────────────
 
     const _chatLimiter = createRateLimiter();
     let _countdownTimer = null;
@@ -175,7 +365,7 @@ createApp({
       try {
         const db = getDb();
         await db.ref('messages').push({
-          from: chatName.value,
+          from: chatDisplayName.value,
           emoji: chatEmoji.value,
           text,
           ts: firebase.database.ServerValue.TIMESTAMP,
@@ -495,6 +685,7 @@ createApp({
             binanceVolume: d.volume,
             binanceUpDown,
           });
+          checkPrediction(symbol);
         });
       } else if (event === 'binance-prices') {
         Object.entries(data).forEach(([symbol, price]) => {
@@ -752,6 +943,7 @@ createApp({
       initFavorites();
       setInterval(checkAlarms, 5000);
       initChat();
+      initPrediction();
       connectLiqStream();
       connectBybitLiqStream();
       // Fetch OKX instrument ctVals once, then seed history and start WS
@@ -765,8 +957,9 @@ createApp({
     return {
       usdKrw, jpyKrw, btcDominance, coinbaseUsdPremium, usdtKrwPrice,
       nightMode, searchStr, showFilter, showCharts, showAlarm, showChat, showNews, showLiq,
-      chatName, chatEmoji, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
-      sendChatMessage, saveNickname,
+      chatName, chatEmoji, chatDisplayName, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
+      sendChatMessage, saveNickname, deleteMessage, resetAllPoints,
+      predSymbol, predPrice, predBet, predSubmitting, predError, predPending, predCountdown, predScore, predRank, submitPrediction,
       status, favCoins, showFavOnly, alarms,
       initialLoading,
       sortKey, sortDir,

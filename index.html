@@ -386,7 +386,7 @@
         <span class="chat-online-dot"></span>{{ onlineCount }} {{ onlineCount === 1 ? 'user' : 'users' }}
       </span>
       <div class="chat-nick-wrap" style="margin-left:auto">
-        <span v-if="!chatEditingNick" class="chat-nick-badge" @click="chatEditingNick=true" title="닉네임 변경">{{ chatEmoji }} {{ chatName }} ✎</span>
+        <span v-if="!chatEditingNick" class="chat-nick-badge" @click="chatEditingNick=true" title="닉네임 변경">{{ chatEmoji }} {{ chatDisplayName }} ✎</span>
         <input v-else class="chat-nick-edit" v-model="chatName" maxlength="20"
                @blur="saveNickname" @keyup.enter="saveNickname" ref="nickEditEl" />
       </div>
@@ -396,24 +396,50 @@
         <div v-if="chatMessages.length === 0" class="chat-empty">No messages yet</div>
         <div v-for="m in chatMessages" :key="m.id"
              class="chat-msg"
-             :class="[m.from === chatName && m.emoji === chatEmoji ? 'msg-own' : (m.fromTg ? 'msg-tg' : 'msg-web')]">
-          <!-- others: show name/emoji/badge -->
-          <div class="chat-msg-header" v-if="!(m.from === chatName && m.emoji === chatEmoji)">
-            <span class="chat-emoji">{{ m.emoji || '👤' }}</span>
-            <span class="chat-from">{{ m.from }}</span>
-            <span v-if="m.fromTg" class="chat-tg-badge">TG</span>
-            <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
+             :class="[m.deleted || m.isPrediction ? 'msg-system-wrap' : (m.emoji === chatEmoji ? 'msg-own' : (m.fromTg ? 'msg-tg' : 'msg-web'))]">
+          <!-- deleted message -->
+          <div v-if="m.deleted" class="msg-system-notice">
+            🗑 {{ m.deletedBy ? `${m.deletedBy}이(가) 메시지를 삭제했습니다` : '삭제된 메시지입니다' }}
           </div>
-          <!-- own: emoji + nickname + timestamp, right-aligned -->
-          <div class="chat-msg-header" v-else style="justify-content:flex-end;margin-bottom:2px">
-            <span class="chat-emoji">{{ m.emoji || '👤' }}</span>
-            <span class="chat-from" style="color:rgba(255,255,255,0.85)">{{ m.from }}</span>
-            <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
-          </div>
-          <div class="chat-text">{{ m.text }}</div>
+          <!-- prediction / result message -->
+          <div v-else-if="m.isPrediction" class="msg-system-notice">{{ m.text }}<strong v-if="m.textBold"> {{ m.textBold }}</strong></div>
+          <template v-else>
+            <!-- others -->
+            <div class="chat-msg-header" v-if="m.emoji !== chatEmoji">
+              <span class="chat-emoji">{{ m.emoji || '👤' }}</span>
+              <span class="chat-from">{{ m.from }}</span>
+              <span v-if="m.fromTg" class="chat-tg-badge">TG</span>
+              <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
+              <button v-if="predRank === 1 && !m.isPrediction" class="msg-delete-btn" @click="deleteMessage(m.id)" title="메시지 삭제">✕</button>
+            </div>
+            <!-- own -->
+            <div class="chat-msg-header" v-else style="justify-content:flex-end;margin-bottom:2px">
+              <span class="chat-emoji">{{ m.emoji || '👤' }}</span>
+              <span class="chat-from" style="color:rgba(255,255,255,0.85)">{{ m.from }}</span>
+              <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
+            </div>
+            <div class="chat-text">{{ m.text }}</div>
+          </template>
         </div>
       </div>
       <div class="chat-error" v-if="chatError">{{ chatError }}</div>
+      <!-- Prediction row -->
+      <div class="pred-input-row">
+        <input class="pred-sym-input" v-model="predSymbol" placeholder="BTC" maxlength="10"
+               @keyup.enter="submitPrediction" :disabled="!!predPending" />
+        <input class="pred-price-input" v-model="predPrice" type="number" placeholder="가격 (USD)"
+               @keyup.enter="submitPrediction" :disabled="!!predPending" />
+        <input class="pred-bet-input" v-model="predBet" type="number" placeholder="배팅 (p)" min="1" :max="predScore.points"
+               @keyup.enter="submitPrediction" :disabled="!!predPending" />
+        <button class="pred-btn" @click="submitPrediction" :disabled="predSubmitting || !predPrice || !predBet || !!predPending">예측</button>
+      </div>
+      <div v-if="predScore.points > 1000000" class="pred-admin-row">
+        <button class="pred-reset-btn" @click="resetAllPoints">포인트 초기화 (→ 10p)</button>
+      </div>
+      <div v-if="predError" class="pred-error">{{ predError }}</div>
+      <div v-if="predPending" class="pred-status">
+        ⏳ {{ predPending.symbol }} ${{ Number(predPending.targetPrice).toLocaleString() }} · 배팅 {{ predPending.bet }}p — {{ predCountdown }}
+      </div>
       <div class="chat-input-row">
         <input class="chat-input" v-model="chatInput" placeholder="Type a message..."
                maxlength="300" @keyup.enter="sendChatMessage" :disabled="chatSending"

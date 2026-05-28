@@ -3,13 +3,17 @@
     "messages": {
       ".read": true,
       "$messageId": {
-        ".write": "newData.exists() && !data.exists()",
+        ".write": "newData.exists() || data.exists()",
         ".validate": "newData.hasChildren(['from', 'text', 'ts'])",
-        "from":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
-        "emoji": { ".validate": "newData.isString() && newData.val().length <= 10" },
-        "text":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 300" },
-        "ts":    { ".validate": "newData.val() == now" },
-        "$other": { ".validate": false }
+        "from":        { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 50" },
+        "emoji":       { ".validate": "newData.isString() && newData.val().length <= 10" },
+        "text":        { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 500" },
+        "ts":          { ".validate": "newData.val() == now || data.child('ts').exists()" },
+        "isPrediction":{ ".validate": "newData.isBoolean()" },
+        "textBold":    { ".validate": "newData.isString() && newData.val().length <= 200" },
+        "deleted":     { ".validate": "newData.isBoolean()" },
+        "deletedBy":   { ".validate": "newData.isString() && newData.val().length <= 50" },
+        "$other":      { ".validate": false }
       }
     },
     "presence": {
@@ -20,6 +24,40 @@
         "name":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
         "emoji": { ".validate": "newData.isString() && newData.val().length <= 10" },
         "ts":    { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+    "scores": {
+      ".read": true,
+      "$sessionId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['points', 'tries'])",
+        "correct": { ".validate": "newData.isNumber()" },
+        "tries":   { ".validate": "newData.isNumber()" },
+        "points":  { ".validate": "newData.isNumber()" },
+        "ts":      { ".validate": "newData.isNumber()" },
+        "$other":  { ".validate": false }
+      }
+    },
+    "predictions": {
+      ".read": true,
+      "$sessionId": {
+        ".write": true,
+        ".validate": "!newData.exists() || newData.hasChildren(['symbol', 'targetPrice', 'targetTs', 'bet'])",
+        "symbol":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
+        "targetPrice": { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "targetTs":    { ".validate": "newData.isNumber()" },
+        "bet":         { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "$other":      { ".validate": false }
+      }
+    },
+    "settings": {
+      ".read": true,
+      "pointsReset": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['ts', 'points'])",
+        "ts":     { ".validate": "newData.isNumber()" },
+        "points": { ".validate": "newData.isNumber() && newData.val() > 0" },
         "$other": { ".validate": false }
       }
     },
