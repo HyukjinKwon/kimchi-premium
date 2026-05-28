@@ -14,6 +14,14 @@ const ExchangeManager = (() => {
     status: { upbit: 'disconnected', binance: 'disconnected' },
   };
 
+  // Exponential backoff: 1s → 2s → 4s → … capped at 30s, plus jitter
+  function backoff(attempt) {
+    return Math.min(30000, 1000 * Math.pow(2, attempt)) + Math.random() * 500;
+  }
+
+  let _upbitAttempt  = 0;
+  let _binanceAttempt = 0;
+
   function emit(event, data) {
     state.listeners.forEach(fn => fn(event, data));
   }
@@ -56,7 +64,7 @@ const ExchangeManager = (() => {
         return;
       }
     } catch(e) {}
-    setTimeout(fetchGlobal, 15000); // retry sooner on failure
+    setTimeout(fetchGlobal, 15000);
   }
 
   // --- Upbit WebSocket ---
@@ -69,6 +77,7 @@ const ExchangeManager = (() => {
     const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
     ws.onopen = () => {
+      _upbitAttempt = 0;
       state.status.upbit = 'connected';
       emit('status', state.status);
       ws.send(JSON.stringify([
@@ -78,26 +87,29 @@ const ExchangeManager = (() => {
     };
 
     ws.onmessage = async (e) => {
-      const buf = await e.data.arrayBuffer();
-      const text = new TextDecoder().decode(buf);
-      const d = JSON.parse(text);
-      const symbol = d.code.replace('KRW-', '');
-      const prev = state.upbit[symbol];
-      state.upbit[symbol] = {
-        price: d.trade_price,
-        change: d.signed_change_rate,
-        changePrice: d.signed_change_price,
-        volume: d.acc_trade_price_24h / 1e8,
-        high: d.high_price,
-        low: d.low_price,
-      };
-      emit('upbit', { symbol, data: state.upbit[symbol], prev });
+      try {
+        const buf = await e.data.arrayBuffer();
+        const text = new TextDecoder().decode(buf);
+        const d = JSON.parse(text);
+        if (!d.code || typeof d.code !== 'string') return;
+        const symbol = d.code.replace('KRW-', '');
+        const prev = state.upbit[symbol];
+        state.upbit[symbol] = {
+          price: d.trade_price,
+          change: d.signed_change_rate,
+          changePrice: d.signed_change_price,
+          volume: d.acc_trade_price_24h / 1e8,
+          high: d.high_price,
+          low: d.low_price,
+        };
+        emit('upbit', { symbol, data: state.upbit[symbol], prev });
+      } catch(e) {}
     };
 
     ws.onclose = () => {
       state.status.upbit = 'disconnected';
       emit('status', state.status);
-      setTimeout(() => connectUpbit(symbols), 3000);
+      setTimeout(() => connectUpbit(symbols), backoff(_upbitAttempt++));
     };
 
     ws.onerror = () => ws.close();
@@ -113,34 +125,38 @@ const ExchangeManager = (() => {
     const ws = new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
 
     ws.onopen = () => {
+      _binanceAttempt = 0;
       state.status.binance = 'connected';
       emit('status', state.status);
     };
 
     ws.onmessage = (e) => {
-      const arr = JSON.parse(e.data);
-      const updates = [];
-      arr.forEach(t => {
-        if (!t.s.endsWith('USDT')) return;
-        const symbol = t.s.replace('USDT', '');
-        const prev = state.binance[symbol];
-        state.binance[symbol] = {
-          price: parseFloat(t.c),
-          change: (parseFloat(t.c) - parseFloat(t.o)) / parseFloat(t.o),
-          volume: parseFloat(t.q) / 1e6,
-          high: parseFloat(t.h),
-          low: parseFloat(t.l),
-          open: parseFloat(t.o),
-        };
-        updates.push({ symbol, data: state.binance[symbol], prev });
-      });
-      if (updates.length) emit('binance-batch', updates);
+      try {
+        const arr = JSON.parse(e.data);
+        if (!Array.isArray(arr)) return;
+        const updates = [];
+        arr.forEach(t => {
+          if (!t.s || !t.s.endsWith('USDT')) return;
+          const symbol = t.s.replace('USDT', '');
+          const prev = state.binance[symbol];
+          state.binance[symbol] = {
+            price: parseFloat(t.c),
+            change: (parseFloat(t.c) - parseFloat(t.o)) / parseFloat(t.o),
+            volume: parseFloat(t.q) / 1e6,
+            high: parseFloat(t.h),
+            low: parseFloat(t.l),
+            open: parseFloat(t.o),
+          };
+          updates.push({ symbol, data: state.binance[symbol], prev });
+        });
+        if (updates.length) emit('binance-batch', updates);
+      } catch(e) {}
     };
 
     ws.onclose = () => {
       state.status.binance = 'disconnected';
       emit('status', state.status);
-      setTimeout(connectBinance, 3000);
+      setTimeout(connectBinance, backoff(_binanceAttempt++));
     };
 
     ws.onerror = () => ws.close();
@@ -219,10 +235,16 @@ const ExchangeManager = (() => {
     fetchGlobal();
 
     // Show cached BTC dominance immediately while fetchGlobal is in flight
-    const cachedDom = localStorage.getItem('btcDominance');
-    if (cachedDom) emit('global', { btcDominance: cachedDom });
+    try {
+      const cachedDom = localStorage.getItem('btcDominance');
+      if (cachedDom) {
+        const n = parseFloat(cachedDom);
+        if (Number.isFinite(n) && n >= 0 && n <= 100) {
+          emit('global', { btcDominance: n.toFixed(1) });
+        }
+      }
+    } catch(e) {}
 
-    // Fetch both exchange market lists + Binance prices in parallel
     const [upbitSymbols, binanceData] = await Promise.all([
       fetchUpbitMarkets(),
       fetchBinanceMarkets(),
@@ -232,18 +254,15 @@ const ExchangeManager = (() => {
       ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
        'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
 
-    // Compute intersection and broadcast the full symbol list immediately
     const binanceSet = new Set(Object.keys(binanceData));
     const commonSymbols = defaultSymbols.filter(s => binanceSet.has(s));
     emit('symbols', commonSymbols);
 
-    // Seed initial Binance prices from REST (before WebSocket connects)
     const binanceUpdates = commonSymbols
       .filter(s => binanceData[s])
       .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
     if (binanceUpdates.length) emit('binance-batch', binanceUpdates);
 
-    // Seed initial Upbit prices from REST (batched, 100 per request)
     const upbitData = await fetchUpbitTickers(commonSymbols);
     Object.entries(upbitData).forEach(([sym, d]) => {
       state.upbit[sym] = d;

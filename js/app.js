@@ -138,11 +138,16 @@ createApp({
 
     const status = reactive({ upbit: 'disconnected', binance: 'disconnected' });
     const STABLECOINS = new Set(['USDT', 'USDC', 'USDS', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'PYUSD', 'USDP']);
-    const _savedFavs = new Set(JSON.parse(localStorage.getItem('favCoins') || '[]'));
-    STABLECOINS.forEach(s => _savedFavs.delete(s)); // purge stablecoins on every load
+
+    function safeJsonParse(key, fallback) {
+      try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch(e) { return fallback; }
+    }
+
+    const _savedFavs = new Set(Array.isArray(safeJsonParse('favCoins', [])) ? safeJsonParse('favCoins', []) : []);
+    STABLECOINS.forEach(s => _savedFavs.delete(s));
     const favCoins = ref(_savedFavs);
     const showFavOnly = ref(_savedFavs.size > 0);
-    const alarms = ref(JSON.parse(localStorage.getItem('alarms') || '[]'));
+    const alarms = ref(Array.isArray(safeJsonParse('alarms', [])) ? safeJsonParse('alarms', []) : []);
 
     // Sorting — default: market-cap rank ascending
     const sortKey = ref('top20Rank');
@@ -198,12 +203,14 @@ createApp({
           ]));
         };
         ws.onmessage = async (e) => {
-          if (tradeGeneration !== gen) return;
-          const text = new TextDecoder().decode(await e.data.arrayBuffer());
-          const d = JSON.parse(text);
-          if (d.type !== 'trade') return;
-          _tradeBuf.push({ id: d.sequential_id || Date.now(), price: d.trade_price, qty: d.trade_volume, isBuy: d.ask_bid === 'BID', time: new Date(d.trade_timestamp) });
-          if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
+          try {
+            if (tradeGeneration !== gen) return;
+            const text = new TextDecoder().decode(await e.data.arrayBuffer());
+            const d = JSON.parse(text);
+            if (d.type !== 'trade') return;
+            _tradeBuf.push({ id: d.sequential_id || Date.now(), price: d.trade_price, qty: d.trade_volume, isBuy: d.ask_bid === 'BID', time: new Date(d.trade_timestamp) });
+            if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
+          } catch(e) {}
         };
         ws.onerror = () => ws.close();
         ws.onclose  = () => { if (tradeWs === ws) tradeWs = null; };
@@ -212,10 +219,12 @@ createApp({
         const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}${market}@trade`);
         tradeWs = ws;
         ws.onmessage = (e) => {
-          if (tradeGeneration !== gen) return;
-          const d = JSON.parse(e.data);
-          _tradeBuf.push({ id: d.t, price: parseFloat(d.p), qty: parseFloat(d.q), isBuy: !d.m, time: new Date(d.T) });
-          if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
+          try {
+            if (tradeGeneration !== gen) return;
+            const d = JSON.parse(e.data);
+            _tradeBuf.push({ id: d.t, price: parseFloat(d.p), qty: parseFloat(d.q), isBuy: !d.m, time: new Date(d.T) });
+            if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
+          } catch(e) {}
         };
         ws.onerror = () => { if (tradeWs === ws) { ws.close(); tradeWs = null; } };
         ws.onclose  = () => { if (tradeWs === ws) tradeWs = null; };
@@ -531,6 +540,11 @@ createApp({
     let _bybitWs = null;
     let _okxWs = null;
     const _okxCtVal = {};
+    let _liqAttempt = 0, _bybitAttempt = 0, _okxAttempt = 0;
+
+    function _liqBackoff(attempt) {
+      return Math.min(30000, 1000 * Math.pow(2, attempt)) + Math.random() * 500;
+    }
 
     function _recomputeLiq24h() {
       const cutoff = Date.now() - 864e5;
@@ -551,17 +565,19 @@ createApp({
     function connectLiqStream() {
       if (_liqWs) { _liqWs.close(); _liqWs = null; }
       const ws = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
-      ws.onopen  = () => { liqStatus.value = 'connected'; };
+      ws.onopen  = () => { _liqAttempt = 0; liqStatus.value = 'connected'; };
       ws.onmessage = (e) => {
-        const d = JSON.parse(e.data);
-        const o = d.o;
-        if (!o) return;
-        const side = o.S === 'SELL' ? 'LONG' : 'SHORT';
-        const usd  = parseFloat(o.ap) * parseFloat(o.z);
-        if (!usd) return;
-        _pushLiq(o.s.replace('USDT', ''), side, usd, parseFloat(o.ap), o.T || Date.now());
+        try {
+          const d = JSON.parse(e.data);
+          const o = d.o;
+          if (!o) return;
+          const side = o.S === 'SELL' ? 'LONG' : 'SHORT';
+          const usd  = parseFloat(o.ap) * parseFloat(o.z);
+          if (!usd) return;
+          _pushLiq(o.s.replace('USDT', ''), side, usd, parseFloat(o.ap), o.T || Date.now());
+        } catch(e) {}
       };
-      ws.onclose = () => { _liqWs = null; liqStatus.value = 'connecting'; setTimeout(connectLiqStream, 5000); };
+      ws.onclose = () => { _liqWs = null; liqStatus.value = 'connecting'; setTimeout(connectLiqStream, _liqBackoff(_liqAttempt++)); };
       ws.onerror  = () => ws.close();
       _liqWs = ws;
     }
@@ -575,20 +591,22 @@ createApp({
       if (_bybitWs) { _bybitWs.close(); _bybitWs = null; }
       const ws = new WebSocket('wss://stream.bybit.com/v5/public/linear');
       ws.onopen = () => {
+        _bybitAttempt = 0;
         liqStatus.value = 'connected';
         ws.send(JSON.stringify({ op: 'subscribe', args: _BYBIT_SYMS.map(s => 'liquidation.' + s) }));
       };
       ws.onmessage = (e) => {
-        const d = JSON.parse(e.data);
-        if (!d.topic || !d.data) return;
-        const o = d.data;
-        // Bybit: side "Sell" = forced sell = long was liquidated; "Buy" = short liq
-        const side = o.side === 'Sell' ? 'LONG' : 'SHORT';
-        const usd  = parseFloat(o.size) * parseFloat(o.price);
-        if (!usd) return;
-        _pushLiq(o.symbol.replace('USDT', ''), side, usd, parseFloat(o.price), o.updatedTime || Date.now());
+        try {
+          const d = JSON.parse(e.data);
+          if (!d.topic || !d.data) return;
+          const o = d.data;
+          const side = o.side === 'Sell' ? 'LONG' : 'SHORT';
+          const usd  = parseFloat(o.size) * parseFloat(o.price);
+          if (!usd) return;
+          _pushLiq(o.symbol.replace('USDT', ''), side, usd, parseFloat(o.price), o.updatedTime || Date.now());
+        } catch(e) {}
       };
-      ws.onclose = () => { _bybitWs = null; setTimeout(connectBybitLiqStream, 5000); };
+      ws.onclose = () => { _bybitWs = null; setTimeout(connectBybitLiqStream, _liqBackoff(_bybitAttempt++)); };
       ws.onerror  = () => ws.close();
       _bybitWs = ws;
     }
@@ -624,25 +642,28 @@ createApp({
       if (_okxWs) { _okxWs.close(); _okxWs = null; }
       const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
       ws.onopen = () => {
+        _okxAttempt = 0;
         liqStatus.value = 'connected';
         ws.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'liquidation-orders', instType: 'SWAP' }] }));
       };
       ws.onmessage = (e) => {
-        const d = JSON.parse(e.data);
-        if (!d.data || !Array.isArray(d.data)) return;
-        d.data.forEach(entry => {
-          if (!entry.instId || !entry.instId.endsWith('USDT-SWAP')) return;
-          const sym = entry.instId.replace('-USDT-SWAP', '');
-          const cv = _okxCtVal[entry.instId] || 1;
-          (entry.details || []).forEach(det => {
-            const side = det.side === 'sell' ? 'LONG' : 'SHORT';
-            const usd = parseFloat(det.sz) * cv * parseFloat(det.bkPx);
-            if (!usd) return;
-            _pushLiq(sym, side, usd, parseFloat(det.bkPx), parseInt(det.ts, 10) || Date.now());
+        try {
+          const d = JSON.parse(e.data);
+          if (!d.data || !Array.isArray(d.data)) return;
+          d.data.forEach(entry => {
+            if (!entry.instId || !entry.instId.endsWith('USDT-SWAP')) return;
+            const sym = entry.instId.replace('-USDT-SWAP', '');
+            const cv = _okxCtVal[entry.instId] || 1;
+            (entry.details || []).forEach(det => {
+              const side = det.side === 'sell' ? 'LONG' : 'SHORT';
+              const usd = parseFloat(det.sz) * cv * parseFloat(det.bkPx);
+              if (!usd) return;
+              _pushLiq(sym, side, usd, parseFloat(det.bkPx), parseInt(det.ts, 10) || Date.now());
+            });
           });
-        });
+        } catch(e) {}
       };
-      ws.onclose = () => { _okxWs = null; setTimeout(connectOKXLiqStream, 5000); };
+      ws.onclose = () => { _okxWs = null; setTimeout(connectOKXLiqStream, _liqBackoff(_okxAttempt++)); };
       ws.onerror  = () => ws.close();
       _okxWs = ws;
     }

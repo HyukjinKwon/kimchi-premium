@@ -3,6 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-eval'
+    https://www.gstatic.com
+    https://cdn.jsdelivr.net
+    https://s3.tradingview.com https://*.tradingview.com;
+  connect-src 'self'
+    wss://api.upbit.com wss://stream.binance.com:9443 wss://fstream.binance.com
+    wss://stream.bybit.com wss://ws.okx.com:8443
+    https://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebaseio.com wss://*.firebasedatabase.app
+    https://api.coingecko.com https://api.binance.com https://api.upbit.com
+    https://api.exchange.coinbase.com https://open.er-api.com https://api.exchangerate-api.com
+    https://www.okx.com https://min-api.cryptocompare.com https://api.rss2json.com
+    https://cdn.jsdelivr.net;
+  img-src 'self' data: https:;
+  frame-src https://*.tradingview.com;
+  style-src 'self' 'unsafe-inline';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'self';
+">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
 <meta name="description" content="김치프리미엄(김프) 실시간 확인 — Kimchi Premium 실시간 추적. 업비트 vs 바이낸스 코인 시세 비교, 역프(역김치프리미엄), 환율(USD/KRW) 정보 제공.">
 <meta name="keywords" content="김치프리미엄, 김프, Kimchi Premium, 역프, 역김치프리미엄, 실시간김프, 업비트, 바이낸스, 비트코인 시세, 코인 시세, 암호화폐, 가상화폐, realtimekimp, upbit, binance, bitcoin, crypto arbitrage">
 <meta property="og:title" content="김치프리미엄(김프) 실시간 — Kimchi Premium | 업비트 vs 바이낸스">
@@ -297,7 +320,9 @@
       <div class="news-list">
         <div v-if="newsStatus === 'loading'" class="news-empty">Loading...</div>
         <div v-else-if="newsStatus === 'error'" class="news-empty">Unable to load news</div>
-        <a v-for="n in cryptoNews" :key="n.id" :href="n.url" target="_blank" rel="noopener" class="news-item">
+        <a v-for="n in cryptoNews" :key="n.id"
+           :href="n.url && /^https?:\/\//i.test(n.url) ? n.url : '#'"
+           target="_blank" rel="noopener noreferrer" class="news-item">
           <span class="news-title">{{ n.title }}</span>
           <span class="news-age">{{ newsAge(n.published_on) }}</span>
         </a>
@@ -396,46 +421,6 @@
 <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 <script src="js/exchanges.js"></script>
 <script src="js/app.js"></script>
-
-<script>
-// Mount TradingView charts when showCharts becomes true
-// We watch via a MutationObserver on #domichart visibility
-let tvDomi = null, tvKimchi = null;
-function mountCharts() {
-  if (!tvDomi && document.getElementById('domichart')) {
-    tvDomi = new TradingView.widget({
-      autosize: true,
-      symbol: 'CRYPTOCAP:BTC.D',
-      interval: '1D',
-      timezone: 'Asia/Seoul',
-      theme: document.body.classList.contains('night') ? 'Dark' : 'Light',
-      style: '1',
-      locale: 'en',
-      toolbar_bg: '#f1f3f6',
-      enable_publishing: false,
-      container_id: 'domichart',
-    });
-  }
-  if (!tvKimchi && document.getElementById('kimchichart')) {
-    tvKimchi = new TradingView.widget({
-      autosize: true,
-      symbol: 'UPBIT:USDTKRW',
-      interval: '1D',
-      timezone: 'Asia/Seoul',
-      theme: document.body.classList.contains('night') ? 'Dark' : 'Light',
-      style: '1',
-      locale: 'en',
-      toolbar_bg: '#f1f3f6',
-      enable_publishing: false,
-      container_id: 'kimchichart',
-    });
-  }
-}
-// Observe DOM for chart section visibility
-const obs = new MutationObserver(() => {
-  if (document.getElementById('domichart')?.offsetParent) mountCharts();
-});
-obs.observe(document.body, { attributes: true, childList: true, subtree: true });
-</script>
+<script src="js/charts.js"></script>
 </body>
 </html>
