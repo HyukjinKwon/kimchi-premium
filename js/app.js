@@ -702,20 +702,13 @@ createApp({
         }));
       }
 
-      // Try Korean crypto news feeds in parallel, use first success
-      const KOREAN_FEEDS = [
-        'https://www.tokenpost.kr/rss',
-        'https://blockmedia.co.kr/feed',
-        'https://www.coindeskkorea.com/feed/',
-      ];
-      const results = await Promise.allSettled(KOREAN_FEEDS.map(fetchRss));
-      const first = results.find(r => r.status === 'fulfilled');
-      if (first) {
-        cryptoNews.value = first.value;
+      // Primary: blockmedia.co.kr (Korean crypto-focused news)
+      try {
+        cryptoNews.value = await fetchRss('https://blockmedia.co.kr/feed');
         newsStatus.value = 'ok';
         setTimeout(fetchNews, 5 * 60 * 1000);
         return;
-      }
+      } catch(e) {}
 
       // Fallback: Google News Korean crypto search
       try {
