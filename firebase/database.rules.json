@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "messages": {
+      ".read": true,
+      "$messageId": {
+        ".write": "newData.exists() && !data.exists()",
+        ".validate": "newData.hasChildren(['from', 'text', 'ts'])",
+        "from":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
+        "emoji": { ".validate": "newData.isString() && newData.val().length <= 10" },
+        "text":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 300" },
+        "ts":    { ".validate": "newData.val() == now" },
+        "$other": { ".validate": false }
+      }
+    },
+    "presence": {
+      ".read": true,
+      "$sessionId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['name', 'ts'])",
+        "name":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
+        "emoji": { ".validate": "newData.isString() && newData.val().length <= 10" },
+        "ts":    { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+    "$other": { ".read": false, ".write": false }
+  }
+}
