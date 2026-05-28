@@ -692,6 +692,7 @@ createApp({
     // ── News feed ─────────────────────────────────────────────────────────────
     const cryptoNews = ref([]);
     const newsStatus = ref('loading');
+    const newsUpdatedAt = ref('');
 
     async function fetchNews() {
       newsStatus.value = 'loading';
@@ -713,6 +714,7 @@ createApp({
       try {
         cryptoNews.value = await fetchRss('https://blockmedia.co.kr/feed');
         newsStatus.value = 'ok';
+        newsUpdatedAt.value = new Date().toLocaleTimeString();
         setTimeout(fetchNews, 5 * 60 * 1000);
         return;
       } catch(e) {}
@@ -722,6 +724,7 @@ createApp({
         const gnFeed = 'https://news.google.com/rss/search?q=암호화폐+비트코인&hl=ko&gl=KR&ceid=KR:ko';
         cryptoNews.value = await fetchRss(gnFeed);
         newsStatus.value = 'ok';
+        newsUpdatedAt.value = new Date().toLocaleTimeString();
         setTimeout(fetchNews, 5 * 60 * 1000);
         return;
       } catch(e) {}
@@ -768,7 +771,7 @@ createApp({
       showCoinChart, closeCoinChart,
       recentTrades, fmtTradePrice, fmtTradeQty,
       recentLiqs, liqLong24h, liqShort24h, liqStatus, fmtLiqUsd, fmtLiqPrice,
-      cryptoNews, newsStatus, newsAge,
+      cryptoNews, newsStatus, newsUpdatedAt, newsAge,
     };
   }
 }).mount('#app');
