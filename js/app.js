@@ -11,11 +11,12 @@ createApp({
     const nightMode = ref(localStorage.getItem('nightMode') === '1');
     const searchStr = ref('');
     const showFilter = ref(false);
-    const showCharts = ref(true);
+    const _desktop = window.innerWidth > 1024;
+    const showCharts = ref(window.innerWidth > 768);
     const showAlarm = ref(false);
-    const showChat = ref(true);
-    const showNews = ref(true);
-    const showLiq  = ref(true);
+    const showChat = ref(_desktop);
+    const showNews = ref(_desktop);
+    const showLiq  = ref(_desktop);
 
     // ── Chat (Firebase Realtime Database) ────────────────────────────────────
     // Paste your config from: Firebase console → Project Settings → Your apps → SDK setup

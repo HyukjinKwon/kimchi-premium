@@ -153,7 +153,18 @@ body {
   flex-direction: column;
 }
 @media (max-width: 1024px) {
-  .chat-sidebar { display: none; }
+  .page-layout { flex-direction: column; }
+  .chat-sidebar {
+    width: 100%;
+    min-width: unset;
+    height: auto;
+    max-height: none;
+    position: static;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .news-panel { height: auto; max-height: 280px; }
+  .chat-section { height: 400px; flex: none; }
 }
 
 /* PREMIUM CARD */
@@ -327,13 +338,34 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
-  .premium-card { gap: 12px; }
+  /* Nav: hide button text labels, tighten spacing */
+  .btn-label { display: none; }
+  .btn-night { padding: 5px 9px; font-size: 13px; }
+  .nav-right { gap: 4px; }
+  #topNav { padding: 0 10px; }
+
+  /* Top bar: allow wrapping into 2×2 grid */
+  #topBar { gap: 6px 14px; justify-content: space-between; padding: 6px 10px; }
+  .top-item { flex: 0 0 calc(50% - 8px); }
+
+  /* Premium card */
+  .premium-card { gap: 12px; padding: 14px 12px; }
   .premium-card .ex-price { font-size: 16px; }
   .premium-result .pct { font-size: 22px; }
+
+  /* Coin table */
   .nav-links { display: none; }
   table.coin-table th, table.coin-table td { padding: 6px 6px; font-size: 11px; }
   .hide-mobile { display: none; }
-  #topBar { gap: 10px; }
+
+  /* Search input */
+  .search-input { width: 110px; }
+
+  /* Alarm panel */
+  .alarm-panel { width: calc(100vw - 32px); max-width: 300px; right: 16px; }
+
+  /* Main container padding */
+  .main-container { padding: 8px; }
 }
 
 /* FLASH ANIMATION */
