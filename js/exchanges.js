@@ -208,26 +208,31 @@ const ExchangeManager = (() => {
     } catch(e) { return {}; }
   }
 
-  async function fetchUpbitTickers(symbols) {
-    const result = {};
-    for (let i = 0; i < symbols.length; i += 100) {
+  // Fetch Upbit tickers in parallel batches, emitting each batch as it arrives
+  async function fetchAndStreamUpbitTickers(symbols) {
+    const batches = [];
+    for (let i = 0; i < symbols.length; i += 100)
+      batches.push(symbols.slice(i, i + 100));
+
+    await Promise.all(batches.map(async batch => {
       try {
-        const batch = symbols.slice(i, i + 100).map(s => `KRW-${s}`).join(',');
-        const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(batch)}`);
+        const markets = batch.map(s => `KRW-${s}`).join(',');
+        const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(markets)}`);
         const list = await r.json();
         list.forEach(t => {
           const sym = t.market.replace('KRW-', '');
-          result[sym] = {
+          const d = {
             price: t.trade_price,
             change: t.signed_change_rate,
             volume: t.acc_trade_price_24h / 1e8,
             high: t.high_price,
             low: t.low_price,
           };
+          state.upbit[sym] = d;
+          emit('upbit', { symbol: sym, data: d, prev: null });
         });
       } catch(e) {}
-    }
-    return result;
+    }));
   }
 
   async function init() {
@@ -258,16 +263,13 @@ const ExchangeManager = (() => {
     const commonSymbols = defaultSymbols.filter(s => binanceSet.has(s));
     emit('symbols', commonSymbols);
 
+    // Emit Binance data immediately, then stream Upbit batches in parallel
     const binanceUpdates = commonSymbols
       .filter(s => binanceData[s])
       .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
     if (binanceUpdates.length) emit('binance-batch', binanceUpdates);
 
-    const upbitData = await fetchUpbitTickers(commonSymbols);
-    Object.entries(upbitData).forEach(([sym, d]) => {
-      state.upbit[sym] = d;
-      emit('upbit', { symbol: sym, data: d, prev: null });
-    });
+    await fetchAndStreamUpbitTickers(commonSymbols);
 
     connectUpbit(defaultSymbols);
     connectBinance();

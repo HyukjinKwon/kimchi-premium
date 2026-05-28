@@ -498,6 +498,8 @@ createApp({
 
     // CoinMarketCap top-N by market cap (excluding stablecoins and BNB/TRX which are not on Upbit KRW).
     // CMC overall ranks (including stablecoins) are preserved for accurate badge display.
+    // Bump FAV_VERSION whenever CMC_TOP10 changes to reset stale localStorage defaults.
+    const FAV_VERSION = 'v3';
     const CMC_TOP10 = [
       { sym: 'BTC',  rank: 1 },
       { sym: 'ETH',  rank: 2 },
@@ -513,13 +515,16 @@ createApp({
 
     function initFavorites() {
       const map = {};
-      CMC_TOP10.forEach(({ sym, rank }) => {
-        map[sym] = rank;
-        favCoins.value.add(sym);
-      });
+      CMC_TOP10.forEach(({ sym, rank }) => { map[sym] = rank; });
       top20.value = map;
-      localStorage.setItem('favCoins', JSON.stringify([...favCoins.value]));
-      showFavOnly.value = true;
+
+      // Reset to current defaults if version changed (clears stale coins like BNB/TRX)
+      if (safeJsonParse('favVersion', null) !== FAV_VERSION) {
+        favCoins.value = new Set(CMC_TOP10.map(c => c.sym));
+        localStorage.setItem('favCoins', JSON.stringify([...favCoins.value]));
+        localStorage.setItem('favVersion', JSON.stringify(FAV_VERSION));
+        showFavOnly.value = true;
+      }
     }
 
     // ── Liquidation stream ─────────────────────────────────────────────────────
