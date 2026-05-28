@@ -106,9 +106,11 @@ createApp({
 
     const onlineCount = ref(0);
 
-    // Stable session ID used by both chat and prediction
+    // Tab-scoped session ID for chat presence; persistent user ID for betting/scores
     const _sessionId = sessionStorage.getItem('chatSession') || Math.random().toString(36).slice(2);
     sessionStorage.setItem('chatSession', _sessionId);
+    const _userId = localStorage.getItem('predUserId') || Math.random().toString(36).slice(2);
+    localStorage.setItem('predUserId', _userId);
 
     function initChat() {
       try {
@@ -218,8 +220,8 @@ createApp({
 
       try {
         const db = getDb();
-        await db.ref(`scores/${_sessionId}`).update({ correct: predScore.correct, tries: predScore.tries, points: predScore.points, ts: Date.now() });
-        await db.ref(`predictions/${_sessionId}`).remove();
+        await db.ref(`scores/${_userId}`).update({ correct: predScore.correct, tries: predScore.tries, points: predScore.points, ts: Date.now() });
+        await db.ref(`predictions/${_userId}`).remove();
         await postSystemMessage(resultText, resultBold);
       } catch(e) { console.error('[Pred] Firebase error:', e); }
     }
@@ -232,23 +234,26 @@ createApp({
     function initPrediction() {
       try {
         const db = getDb();
-        db.ref(`scores/${_sessionId}`).once('value', snap => {
+        db.ref(`scores/${_userId}`).once('value', snap => {
           const d = snap.val();
           if (d) { predScore.correct = d.correct || 0; predScore.tries = d.tries || 0; predScore.points = d.points || 10; predScore.ts = d.ts || 0; }
         });
         db.ref('settings/pointsReset').on('value', snap => {
           const d = snap.val();
           if (!d || d.ts <= predScore.ts) return;
-          predScore.points = d.points;
           predScore.correct = 0;
           predScore.tries = 0;
+          predScore.points = d.points;
           predScore.ts = d.ts;
-          try { db.ref(`scores/${_sessionId}`).set({ points: d.points, correct: 0, tries: 0, ts: d.ts }); } catch(e) {}
+          try { db.ref(`scores/${_userId}`).set({ points: d.points, correct: 0, tries: 0, ts: d.ts }); } catch(e) {}
         });
-        db.ref(`predictions/${_sessionId}`).once('value', snap => {
+        db.ref(`predictions/${_userId}`).once('value', snap => {
           const d = snap.val();
-          if (d) {
-            predPending.value = { symbol: d.symbol, targetPrice: d.targetPrice, targetTs: d.targetTs, bet: d.bet || 0 };
+          if (!d) return;
+          predPending.value = { symbol: d.symbol, targetPrice: d.targetPrice, targetTs: d.targetTs, bet: d.bet || 0 };
+          if (Date.now() >= d.targetTs) {
+            resolvePrediction();
+          } else {
             schedulePredictionResolve(d.targetTs);
             startCountdownTicker();
           }
@@ -259,7 +264,7 @@ createApp({
             .map(([id, s]) => ({ id, points: s.points || 0, tries: s.tries || 0 }))
             .filter(s => s.tries > 0 && s.points > 10)
             .sort((a, b) => b.points - a.points || a.tries - b.tries);
-          const idx = list.findIndex(s => s.id === _sessionId);
+          const idx = list.findIndex(s => s.id === _userId);
           predRank.value = idx >= 0 ? idx + 1 : null;
         });
       } catch(e) {}
@@ -291,20 +296,28 @@ createApp({
       predSubmitting.value = true;
       predScore.tries++;
       const targetTs = Date.now() + 60 * 60 * 1000;
-      predPending.value = { symbol: sym, targetPrice: target, targetTs, bet };
-      schedulePredictionResolve(targetTs);
-      startCountdownTicker();
-      predPrice.value = '';
-      predBet.value = '';
-      predSubmitting.value = false;
+      const pending = { symbol: sym, targetPrice: target, targetTs, bet };
 
       try {
         const db = getDb();
-        await db.ref(`predictions/${_sessionId}`).set({ symbol: sym, targetPrice: target, targetTs, bet });
-        await db.ref(`scores/${_sessionId}`).update({ correct: predScore.correct, tries: predScore.tries, points: predScore.points, ts: Date.now() });
+        await db.ref(`predictions/${_userId}`).set(pending);
+        predPending.value = pending;
+        schedulePredictionResolve(targetTs);
+        startCountdownTicker();
+        predPrice.value = '';
+        predBet.value = '';
+        await db.ref(`scores/${_userId}`).update({ correct: predScore.correct, tries: predScore.tries, points: predScore.points, ts: Date.now() });
         const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
         await postSystemMessage(`${chatEmoji.value} ${chatDisplayName.value} — ${sym} 1시간 후 $${fmt(target)} 예측 | 배팅 ${bet}p`);
-      } catch(e) {}  // Firebase errors don't cancel the local prediction
+      } catch(e) {
+        predScore.tries--;
+        predError.value = predPending.value
+          ? `이미 예측 중입니다. ${predCountdown.value}`
+          : '예측을 저장하지 못했습니다. 잠시 후 다시 시도하세요.';
+        setTimeout(() => { predError.value = ''; }, 3000);
+      } finally {
+        predSubmitting.value = false;
+      }
     }
 
     function checkPrediction(symbol) {

@@ -41,8 +41,8 @@
     },
     "predictions": {
       ".read": true,
-      "$sessionId": {
-        ".write": true,
+      "$userId": {
+        ".write": "(!data.exists() && newData.exists() && newData.child('targetTs').val() > now && newData.child('targetTs').val() <= now + 3660000 && newData.child('bet').val() > 0 && (!root.child('scores').child($userId).child('points').exists() || newData.child('bet').val() <= root.child('scores').child($userId).child('points').val())) || (data.exists() && !newData.exists())",
         ".validate": "!newData.exists() || newData.hasChildren(['symbol', 'targetPrice', 'targetTs', 'bet'])",
         "symbol":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
         "targetPrice": { ".validate": "newData.isNumber() && newData.val() > 0" },
