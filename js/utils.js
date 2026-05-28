@@ -72,7 +72,7 @@ function fmtLiqPrice(n) {
 }
 
 function newsAge(ts) {
-  return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  return new Date(ts * 1000).toLocaleTimeString();
 }
 
 function coinIcon(symbol) {
