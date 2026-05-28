@@ -64,7 +64,7 @@
 
   <!-- NAV -->
   <nav id="topNav">
-    <a class="nav-brand" href="/">🌶 실시간김프 <span class="nav-brand-sub">실시간 김프 · 역프</span></a>
+    <a class="nav-brand" href="/">실시간김프 <span class="nav-brand-sub">실시간 김프 · 역프</span></a>
     <div class="nav-right">
       <span style="font-size:11px;color:#888;margin-right:8px">
         <span class="status-dot" :class="status.upbit"></span>Upbit
@@ -190,7 +190,12 @@
         </div>
       </div>
 
-      <table class="coin-table">
+      <div v-if="initialLoading" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <span>시세 불러오는 중...</span>
+      </div>
+
+      <table v-else class="coin-table">
         <thead>
           <tr>
             <th style="width:120px" @click="setSort('symbol')">

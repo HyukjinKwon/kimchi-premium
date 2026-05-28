@@ -193,6 +193,7 @@ createApp({
     const alarms = ref(Array.isArray(safeJsonParse('alarms', [])) ? safeJsonParse('alarms', []) : []);
 
     // Sorting — default: market-cap rank ascending
+    const initialLoading = ref(true);
     const sortKey = ref('top20Rank');
     const sortDir = ref(-1);
 
@@ -734,6 +735,7 @@ createApp({
     onMounted(async () => {
       ExchangeManager.on(handleExchangeEvent);
       await ExchangeManager.init();
+      initialLoading.value = false;
       initFavorites();
       setInterval(checkAlarms, 5000);
       initChat();
@@ -753,6 +755,7 @@ createApp({
       chatName, chatEmoji, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
       sendChatMessage, saveNickname,
       status, favCoins, showFavOnly, alarms,
+      initialLoading,
       sortKey, sortDir,
       rows, btcRow,
       setSort, sortIcon,

@@ -309,6 +309,18 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
 
 /* LOADING */
 .loading-row td { text-align: center; color: var(--text-muted); padding: 40px; }
+.loading-overlay {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 80px 0; gap: 16px; color: var(--text-muted); font-size: 14px;
+}
+.loading-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* COIN SEARCH FILTER */
 .coin-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
