@@ -19,7 +19,7 @@ function fmtPct(n) {
 
 function fmtPremium(n) {
   if (n == null || isNaN(n)) return '--';
-  return (n >= 0 ? '+' : '') + n.toFixed(3) + '%';
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 }
 
 function pctClass(n) {
