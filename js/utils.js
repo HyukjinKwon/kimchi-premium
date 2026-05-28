@@ -24,7 +24,7 @@ function fmtPct(n) {
 
 function fmtPremium(n) {
   if (n == null || isNaN(n)) return '--';
-  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+  return (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 }
 
 function pctClass(n) {

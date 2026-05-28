@@ -180,6 +180,7 @@ body {
   gap: 24px;
   flex-wrap: wrap;
 }
+.premium-exchanges { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
 .premium-card .ex-block { display: flex; align-items: center; gap: 10px; }
 .premium-card .ex-logo { height: 28px; }
 .premium-card .ex-name { font-size: 11px; color: var(--text-muted); }

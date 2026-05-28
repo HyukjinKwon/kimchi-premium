@@ -128,23 +128,25 @@
 
     <!-- BTC PREMIUM HERO CARD -->
     <div class="premium-card" v-if="btcRow">
-      <div class="ex-block">
-        <img src="https://www.google.com/s2/favicons?domain=upbit.com&sz=32" class="ex-logo" onerror="this.style.display='none'">
-        <div>
-          <div class="ex-name">Upbit (KRW)</div>
-          <div class="ex-price">{{ fmtKrw(btcRow.krwPrice) }}₩</div>
-          <div class="ex-sub">${{ fmtUsd(btcRow.krwPrice / usdKrw) }}</div>
+      <div class="premium-exchanges">
+        <div class="ex-block">
+          <img src="https://www.google.com/s2/favicons?domain=upbit.com&sz=32" class="ex-logo" onerror="this.style.display='none'">
+          <div>
+            <div class="ex-name">Upbit (KRW)</div>
+            <div class="ex-price">{{ fmtKrw(btcRow.krwPrice) }}₩</div>
+            <div class="ex-sub">${{ fmtUsd(btcRow.krwPrice / usdKrw) }}</div>
+          </div>
         </div>
-      </div>
 
-      <span class="premium-sign">−</span>
+        <span class="premium-sign">−</span>
 
-      <div class="ex-block">
-        <img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" class="ex-logo" onerror="this.style.display='none'">
-        <div>
-          <div class="ex-name">Binance (USDT→KRW)</div>
-          <div class="ex-price">{{ fmtKrw(btcRow.binanceKrw) }}₩</div>
-          <div class="ex-sub">${{ fmtUsd(btcRow.usdPrice) }}</div>
+        <div class="ex-block">
+          <img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" class="ex-logo" onerror="this.style.display='none'">
+          <div>
+            <div class="ex-name">Binance (USDT→KRW)</div>
+            <div class="ex-price">{{ fmtKrw(btcRow.binanceKrw) }}₩</div>
+            <div class="ex-sub">${{ fmtUsd(btcRow.usdPrice) }}</div>
+          </div>
         </div>
       </div>
 
@@ -200,11 +202,11 @@
             <th style="width:120px" @click="setSort('symbol')">
               Coin <span class="sort-icon" :class="{sorted: sortKey==='symbol'}">{{ sortIcon('symbol') }}</span>
             </th>
-            <th @click="setSort('krwPrice')" class="hide-mobile">
+            <th @click="setSort('krwPrice')">
               Upbit(₩)
               <span class="sort-icon" :class="{sorted: sortKey==='krwPrice'}">{{ sortIcon('krwPrice') }}</span>
             </th>
-            <th @click="setSort('usdPrice')">
+            <th @click="setSort('usdPrice')" class="hide-mobile">
               Binance($)
               <span class="sort-icon" :class="{sorted: sortKey==='usdPrice'}">{{ sortIcon('usdPrice') }}</span>
             </th>
@@ -242,11 +244,10 @@
                   <span class="coin-symbol">{{ row.symbol }}</span>
                 </div>
               </td>
-              <td class="hide-mobile"
-                  :class="[row.upDown === 'up' ? 'td-up' : row.upDown === 'down' ? 'td-down' : '', row.upDown ? 'flash-'+row.upDown : '']">
+              <td :class="[row.upDown === 'up' ? 'td-up' : row.upDown === 'down' ? 'td-down' : '', row.upDown ? 'flash-'+row.upDown : '']">
                 {{ fmtKrw(row.krwPrice) }}
               </td>
-              <td :class="[row.binanceUpDown === 'up' ? 'td-up' : row.binanceUpDown === 'down' ? 'td-down' : '', row.binanceUpDown ? 'flash-'+row.binanceUpDown : '']">
+              <td class="hide-mobile" :class="[row.binanceUpDown === 'up' ? 'td-up' : row.binanceUpDown === 'down' ? 'td-down' : '', row.binanceUpDown ? 'flash-'+row.binanceUpDown : '']">
                 {{ fmtUsd(row.usdPrice) }}
               </td>
               <td class="hide-mobile">{{ fmtKrw(row.binanceKrw) }}</td>

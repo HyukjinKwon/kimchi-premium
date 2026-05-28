@@ -224,20 +224,19 @@ const ExchangeManager = (() => {
   }
 
   // Fetch Upbit tickers in parallel batches of 100 (Upbit's max per request).
-  // Batches of 20 with ~240 remaining symbols = 12 simultaneous requests, which
-  // exceeds Upbit's ~10 req/s quotation rate limit and causes silent 429 failures.
-  async function fetchAndStreamUpbitTickers(symbols) {
+  async function fetchAndStreamUpbitTickers(symbols, retry = 1) {
     const batches = [];
     for (let i = 0; i < symbols.length; i += 100)
       batches.push(symbols.slice(i, i + 100));
 
+    const failed = [];
     await Promise.all(batches.map(async batch => {
       try {
         const markets = batch.map(s => `KRW-${s}`).join(',');
         const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(markets)}`);
-        if (!r.ok) return;
+        if (!r.ok) { failed.push(...batch); return; }
         const list = await r.json();
-        if (!Array.isArray(list)) return;
+        if (!Array.isArray(list)) { failed.push(...batch); return; }
         list.forEach(t => {
           const sym = t.market.replace('KRW-', '');
           const d = {
@@ -250,8 +249,13 @@ const ExchangeManager = (() => {
           state.upbit[sym] = d;
           emit('upbit', { symbol: sym, data: d, prev: null });
         });
-      } catch(e) {}
+      } catch(e) { failed.push(...batch); }
     }));
+
+    if (failed.length && retry > 0) {
+      await new Promise(r => setTimeout(r, 600));
+      await fetchAndStreamUpbitTickers(failed, retry - 1);
+    }
   }
 
   // Fetch Binance 24hr data for a small set of symbols using the multi-symbol endpoint
@@ -300,31 +304,28 @@ const ExchangeManager = (() => {
     } catch(e) {}
     emit('symbols', cachedSymbols || PRIORITY_SYMS);
 
-    // Priority coins: fire-and-forget, don't block init on these
-    fetchAndStreamUpbitTickers(PRIORITY_SYMS);  // ~20ms, 15KB
-    fetchBinancePriority(PRIORITY_SYMS);         // ~50ms,  5KB
+    fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
-    // Start both slow fetches in parallel but handle them independently
+    // Start both slow fetches in parallel
     const upbitMarketsP = fetchUpbitMarkets();   // ~30ms,  56KB
-    const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB ← former bottleneck
+    const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB
 
-    // As soon as Upbit markets arrive (~30ms), start streaming remaining Upbit
-    // prices and expand the table — don't wait for the 148KB Binance file
     const upbitSymbols = await upbitMarketsP;
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
       ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
        'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
 
+    if (!cachedSymbols) emit('symbols', defaultSymbols); // first visit: expand table early
+
+    // Fetch ALL Upbit tickers (priority + remaining) and await with Binance prices
+    // so every coin has both prices before the table renders (fixes "only N coins" on mobile)
     const prioritySet = new Set(PRIORITY_SYMS);
     const remainingAll = defaultSymbols.filter(s => !prioritySet.has(s));
-    if (!cachedSymbols) emit('symbols', defaultSymbols); // first visit: expand table early
-    const remainingTickersP = remainingAll.length
-      ? fetchAndStreamUpbitTickers(remainingAll)
-      : Promise.resolve();
-
-    // Wait for both Binance prices and remaining Upbit tickers together so the
-    // full table renders with all prices already populated (avoids "only N coins" on slow mobile)
-    const [binancePrices] = await Promise.all([binancePricesP, remainingTickersP]);
+    const [binancePrices] = await Promise.all([
+      binancePricesP,
+      fetchAndStreamUpbitTickers(PRIORITY_SYMS),
+      ...(remainingAll.length ? [fetchAndStreamUpbitTickers(remainingAll)] : []),
+    ]);
     const binancePriceSet = new Set(Object.keys(binancePrices));
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);

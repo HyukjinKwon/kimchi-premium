@@ -34,8 +34,8 @@ test('fmtPct formats zero with +', () => assert.equal(fmtPct(0), '+0.00%'));
 
 // ── fmtPremium ───────────────────────────────────────────────────────────────
 test('fmtPremium returns -- for null', () => assert.equal(fmtPremium(null), '--'));
-test('fmtPremium shows 2dp positive', () => assert.equal(fmtPremium(2.345), '+2.35%'));
-test('fmtPremium shows 2dp negative', () => assert.equal(fmtPremium(-1.234), '-1.23%'));
+test('fmtPremium shows 1dp positive', () => assert.equal(fmtPremium(2.345), '+2.3%'));
+test('fmtPremium shows 1dp negative', () => assert.equal(fmtPremium(-1.234), '-1.2%'));
 
 // ── pctClass ─────────────────────────────────────────────────────────────────
 test('pctClass td-up for positive', () => assert.equal(pctClass(0.5), 'td-up'));
