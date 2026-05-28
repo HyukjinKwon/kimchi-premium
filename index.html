@@ -285,7 +285,7 @@
                       <div v-if="recentTrades.length === 0" class="trades-empty">Connecting...</div>
                       <div v-for="t in recentTrades" :key="t.id"
                            class="trade-item" :class="t.isBuy ? 'trade-buy' : 'trade-sell'">
-                        <span class="trade-price">{{ fmtTradePrice(t.price) }}</span>
+                        <span class="trade-price">{{ chartExchange === 'upbit' ? fmtKrw(t.price) : fmtTradePrice(t.price) }}</span>
                         <span class="trade-qty">{{ fmtTradeQty(t.qty) }}</span>
                         <span class="trade-time">{{ t.time.toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}) }}</span>
                       </div>
