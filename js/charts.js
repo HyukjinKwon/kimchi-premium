@@ -23,11 +23,14 @@ function mountCharts() {
 }
 
 function remountCharts() {
-  const domiEl = document.getElementById('domichart');
+  // Pause observer so clearing innerHTML doesn't trigger a double-mount race
+  _chartObs.disconnect();
+  const domiEl   = document.getElementById('domichart');
   const kimchiEl = document.getElementById('kimchichart');
-  if (domiEl && tvDomi)   { domiEl.innerHTML   = ''; tvDomi   = null; }
-  if (kimchiEl && tvKimchi) { kimchiEl.innerHTML = ''; tvKimchi = null; }
+  if (domiEl)   { domiEl.innerHTML   = ''; tvDomi   = null; }
+  if (kimchiEl) { kimchiEl.innerHTML = ''; tvKimchi = null; }
   mountCharts();
+  _chartObs.observe(document.body, { attributes: true, childList: true, subtree: true });
 }
 
 const _chartObs = new MutationObserver(() => {

@@ -689,52 +689,43 @@ createApp({
     async function fetchNews() {
       newsStatus.value = 'loading';
 
-      // Primary: CryptoCompare Korean news
-      try {
+      async function fetchRss(feedUrl) {
         const ctrl = new AbortController();
-        const tid = setTimeout(() => ctrl.abort(), 6000);
-        const r = await fetch('https://min-api.cryptocompare.com/data/news/?lang=KR', { signal: ctrl.signal });
+        const tid = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl), { signal: ctrl.signal });
         clearTimeout(tid);
-        if (r.ok) {
-          const d = await r.json();
-          const items = Array.isArray(d) ? d : (Array.isArray(d.Data) ? d.Data : null);
-          if (items && items.length > 0) {
-            cryptoNews.value = items.slice(0, 6).map(item => ({
-              id: String(item.id), title: item.title, url: item.url,
-              published_on: item.published_on,
-            }));
-            newsStatus.value = 'ok';
-            setTimeout(fetchNews, 5 * 60 * 1000);
-            return;
-          }
-        }
-      } catch(e) {}
+        const d = await r.json();
+        if (d.status !== 'ok' || !Array.isArray(d.items) || !d.items.length) throw new Error('empty');
+        return d.items.slice(0, 6).map(item => ({
+          id: item.guid || item.link, title: item.title, url: item.link,
+          published_on: Math.floor(new Date(item.pubDate).getTime() / 1000),
+        }));
+      }
 
-      // Fallback: Korean crypto news RSS feeds
-      const RSS_FEEDS = [
+      // Try Korean crypto news feeds in parallel, use first success
+      const KOREAN_FEEDS = [
         'https://www.tokenpost.kr/rss',
         'https://blockmedia.co.kr/feed',
-        'https://coinreaders.com/rssfeed.php',
+        'https://www.coindeskkorea.com/feed/',
       ];
-      for (const feed of RSS_FEEDS) {
-        try {
-          const ctrl = new AbortController();
-          const tid = setTimeout(() => ctrl.abort(), 8000);
-          const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feed);
-          const r = await fetch(url, { signal: ctrl.signal });
-          clearTimeout(tid);
-          const d = await r.json();
-          if (d.status === 'ok' && Array.isArray(d.items) && d.items.length > 0) {
-            cryptoNews.value = d.items.slice(0, 6).map(item => ({
-              id: item.guid || item.link, title: item.title, url: item.link,
-              published_on: Math.floor(new Date(item.pubDate).getTime() / 1000),
-            }));
-            newsStatus.value = 'ok';
-            setTimeout(fetchNews, 5 * 60 * 1000);
-            return;
-          }
-        } catch(e) {}
+      const results = await Promise.allSettled(KOREAN_FEEDS.map(fetchRss));
+      const first = results.find(r => r.status === 'fulfilled');
+      if (first) {
+        cryptoNews.value = first.value;
+        newsStatus.value = 'ok';
+        setTimeout(fetchNews, 5 * 60 * 1000);
+        return;
       }
+
+      // Fallback: Google News Korean crypto search
+      try {
+        const gnFeed = 'https://news.google.com/rss/search?q=암호화폐+비트코인&hl=ko&gl=KR&ceid=KR:ko';
+        cryptoNews.value = await fetchRss(gnFeed);
+        newsStatus.value = 'ok';
+        setTimeout(fetchNews, 5 * 60 * 1000);
+        return;
+      } catch(e) {}
+
       newsStatus.value = 'error';
       setTimeout(fetchNews, 60 * 1000);
     }
