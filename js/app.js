@@ -134,7 +134,7 @@ createApp({
 
     async function sendChatMessage() {
       const text = chatInput.value.trim();
-      if (!text || chatSending.value) return;
+      if (!text) return;
 
       const limit = _chatLimiter.try();
       if (!limit.ok) {
@@ -142,6 +142,7 @@ createApp({
         return;
       }
 
+      if (chatSending.value) return;
       chatSending.value = true;
       chatError.value = '';
       try {
