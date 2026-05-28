@@ -68,6 +68,25 @@ describe('validateBet', () => {
   });
 });
 
+// ── submitPrediction — target price guard (mirrors app.js line 289) ───────────
+// The guard was changed from `!target || target <= 0`
+// to `!Number.isFinite(target) || target <= 0` to block Infinity.
+describe('target price validation (Number.isFinite guard)', () => {
+  function isValidTarget(raw) {
+    const target = parseFloat(raw);
+    return Number.isFinite(target) && target > 0;
+  }
+
+  test('normal price passes', () => assert.equal(isValidTarget('50000'), true));
+  test('decimal price passes', () => assert.equal(isValidTarget('0.5432'), true));
+  test('zero is rejected', () => assert.equal(isValidTarget('0'), false));
+  test('negative is rejected', () => assert.equal(isValidTarget('-100'), false));
+  test('empty string is rejected', () => assert.equal(isValidTarget(''), false));
+  test('non-numeric string is rejected', () => assert.equal(isValidTarget('abc'), false));
+  test('"Infinity" is rejected (the fixed hole)', () => assert.equal(isValidTarget('Infinity'), false));
+  test('NaN input is rejected', () => assert.equal(isValidTarget('NaN'), false));
+});
+
 // ── resolveOutcome — input validation edge cases ──────────────────────────────
 // The code in app.js guards: target > 0 and actualPrice must exist before
 // calling resolvePrediction. These tests document what happens if those guards

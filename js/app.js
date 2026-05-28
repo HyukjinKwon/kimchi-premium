@@ -282,11 +282,27 @@ createApp({
       }
     });
 
+    // Auto-fill price input with the current Binance price.
+    // On symbol change: always reset to the new symbol's price.
+    // On initial load: fill once when the first price arrives (don't overwrite after that).
+    watch(predSymbol, (sym) => {
+      if (predPending.value) return;
+      const p = prices[sym]?.binancePrice;
+      predPrice.value = p ? String(p) : '';
+    });
+    watch(
+      () => prices[predSymbol.value]?.binancePrice,
+      (price) => {
+        if (predPending.value || !price || predPrice.value) return;
+        predPrice.value = String(price);
+      }
+    );
+
     async function submitPrediction() {
       const sym = predSymbol.value;
       const target = parseFloat(predPrice.value);
       const bet = Math.min(parseInt(predBet.value) || 0, predScore.points);
-      if (!sym || !target || target <= 0 || bet <= 0) return;
+      if (!sym || !Number.isFinite(target) || target <= 0 || bet <= 0) return;
       if (parseInt(predBet.value) > predScore.points) {
         predError.value = `배팅은 보유 포인트(${predScore.points}p)를 초과할 수 없습니다.`;
         setTimeout(() => { predError.value = ''; }, 3000);
