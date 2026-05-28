@@ -170,8 +170,8 @@
     </div>
 
     <!-- LOADING STATE -->
-    <div class="premium-card" v-else style="justify-content:center;color:var(--text-muted)">
-      Connecting to exchanges...
+    <div class="premium-card" v-else style="justify-content:center">
+      <div class="loading-spinner"></div>
     </div>
 
     <!-- CONTROLS -->
@@ -192,7 +192,6 @@
 
       <div v-if="initialLoading" class="loading-overlay">
         <div class="loading-spinner"></div>
-        <span>시세 불러오는 중...</span>
       </div>
 
       <table v-else class="coin-table">
@@ -229,8 +228,8 @@
         </thead>
         <tbody>
           <tr v-if="rows.length === 0">
-            <td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px">
-              Waiting for data...
+            <td colspan="7" style="text-align:center;padding:40px">
+              <div class="loading-spinner" style="margin:0 auto"></div>
             </td>
           </tr>
           <template v-for="row in rows" :key="row.symbol">
