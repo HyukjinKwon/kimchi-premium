@@ -83,7 +83,7 @@ createApp({
     }
 
     const _savedName = localStorage.getItem('chatName');
-    const chatName = ref(_savedName || generateNickname());
+    const chatName = ref((_savedName || generateNickname()).slice(0, 20));
     if (!_savedName) localStorage.setItem('chatName', chatName.value);
 
     const _savedEmoji = localStorage.getItem('chatEmoji');
@@ -142,7 +142,10 @@ createApp({
             if (chatScrollEl.value) chatScrollEl.value.scrollTop = chatScrollEl.value.scrollHeight;
           });
         });
-      } catch(e) { console.error('[Chat] init failed:', e); }
+      } catch(e) {
+        console.error('[Chat] init failed:', e);
+        chatError.value = 'Chat unavailable. If you use an ad blocker, try allowing this site.';
+      }
     }
 
     // ── Prediction system ─────────────────────────────────────────────────────
@@ -161,7 +164,8 @@ createApp({
 
     const chatDisplayName = computed(() => {
       const rank = predRank.value ? ` #${predRank.value}` : '';
-      return `${chatName.value} (${predScore.points}p${rank})`;
+      const full = `${chatName.value} (${predScore.points}p${rank})`;
+      return full.length <= 50 ? full : full.slice(0, 47) + '…';
     });
 
     function startCountdownTicker() {
