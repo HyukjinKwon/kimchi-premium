@@ -134,7 +134,9 @@ createApp({
             ? Object.entries(data).map(([id, m]) => ({ id, ...m })).sort((a, b) => a.ts - b.ts)
             : [];
           await nextTick();
-          if (chatScrollEl.value) chatScrollEl.value.scrollTop = chatScrollEl.value.scrollHeight;
+          requestAnimationFrame(() => {
+            if (chatScrollEl.value) chatScrollEl.value.scrollTop = chatScrollEl.value.scrollHeight;
+          });
         });
       } catch(e) { console.error('[Chat] init failed:', e); }
     }
