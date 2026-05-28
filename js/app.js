@@ -130,9 +130,32 @@ createApp({
       } catch(e) {}
     }
 
+    const BURST_WINDOW = 15_000;  // ms
+    const BURST_LIMIT  = 5;
+    const BURST_BLOCK  = 60_000; // ms
+    const _burstTs = [];          // timestamps of recent sends
+    let   _blockedUntil = 0;
+
     async function sendChatMessage() {
       const text = chatInput.value.trim();
       if (!text || chatSending.value) return;
+
+      const now = Date.now();
+      if (now < _blockedUntil) {
+        const secs = Math.ceil((_blockedUntil - now) / 1000);
+        chatError.value = `너무 많은 메시지입니다. ${secs}초 후에 다시 시도하세요.`;
+        return;
+      }
+
+      // Slide the window: drop timestamps older than BURST_WINDOW
+      while (_burstTs.length && now - _burstTs[0] > BURST_WINDOW) _burstTs.shift();
+      if (_burstTs.length >= BURST_LIMIT) {
+        _blockedUntil = now + BURST_BLOCK;
+        chatError.value = `너무 많은 메시지입니다. 1분 후에 다시 시도하세요.`;
+        return;
+      }
+      _burstTs.push(now);
+
       chatSending.value = true;
       chatError.value = '';
       try {
