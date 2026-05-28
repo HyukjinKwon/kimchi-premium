@@ -1,4 +1,4 @@
-const { createApp, ref, computed, reactive, onMounted, watch, watchEffect, nextTick } = Vue;
+const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
 
 createApp({
   setup() {
@@ -288,14 +288,12 @@ createApp({
       const p = prices[sym]?.binancePrice;
       predPrice.value = p ? String(p) : '';
     });
-    // On initial load: fill once when the first price arrives for the default symbol.
-    // watchEffect re-establishes its dependency chain eagerly, so it reliably catches
-    // the first binancePrice write even when prices[sym] didn't exist on registration.
-    watchEffect(() => {
+
+    function fillPredPriceIfEmpty() {
       if (predPending.value || predPrice.value) return;
       const p = prices[predSymbol.value]?.binancePrice;
       if (p) predPrice.value = String(p);
-    });
+    }
 
     async function submitPrediction() {
       const sym = predSymbol.value;
@@ -720,11 +718,13 @@ createApp({
           });
           checkPrediction(symbol);
         });
+        fillPredPriceIfEmpty();
       } else if (event === 'binance-prices') {
         Object.entries(data).forEach(([symbol, price]) => {
           if (!prices[symbol]) prices[symbol] = {};
           if (!prices[symbol].binancePrice) prices[symbol].binancePrice = price;
         });
+        fillPredPriceIfEmpty();
         updateUsdtKrw();
       } else if (event === 'coinbase-premium') {
         coinbaseUsdPremium.value = data;
