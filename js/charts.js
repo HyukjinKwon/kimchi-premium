@@ -1,35 +1,33 @@
-// Market overview charts (BTC Dominance + USDT/KRW) — mounted once on first visibility
+// Market overview charts (BTC Dominance + USDT/KRW)
 let tvDomi = null, tvKimchi = null;
+
+function _chartTheme() {
+  return document.body.classList.contains('night') ? 'Dark' : 'Light';
+}
 
 function mountCharts() {
   if (!tvDomi && document.getElementById('domichart')) {
     tvDomi = new TradingView.widget({
-      autosize: true,
-      symbol: 'CRYPTOCAP:BTC.D',
-      interval: '1D',
-      timezone: 'Asia/Seoul',
-      theme: document.body.classList.contains('night') ? 'Dark' : 'Light',
-      style: '1',
-      locale: 'en',
-      toolbar_bg: '#f1f3f6',
-      enable_publishing: false,
-      container_id: 'domichart',
+      autosize: true, symbol: 'CRYPTOCAP:BTC.D', interval: '1D',
+      timezone: 'Asia/Seoul', theme: _chartTheme(), style: '1', locale: 'en',
+      enable_publishing: false, container_id: 'domichart',
     });
   }
   if (!tvKimchi && document.getElementById('kimchichart')) {
     tvKimchi = new TradingView.widget({
-      autosize: true,
-      symbol: 'UPBIT:USDTKRW',
-      interval: '1D',
-      timezone: 'Asia/Seoul',
-      theme: document.body.classList.contains('night') ? 'Dark' : 'Light',
-      style: '1',
-      locale: 'en',
-      toolbar_bg: '#f1f3f6',
-      enable_publishing: false,
-      container_id: 'kimchichart',
+      autosize: true, symbol: 'UPBIT:USDTKRW', interval: '1D',
+      timezone: 'Asia/Seoul', theme: _chartTheme(), style: '1', locale: 'en',
+      enable_publishing: false, container_id: 'kimchichart',
     });
   }
+}
+
+function remountCharts() {
+  const domiEl = document.getElementById('domichart');
+  const kimchiEl = document.getElementById('kimchichart');
+  if (domiEl && tvDomi)   { domiEl.innerHTML   = ''; tvDomi   = null; }
+  if (kimchiEl && tvKimchi) { kimchiEl.innerHTML = ''; tvKimchi = null; }
+  mountCharts();
 }
 
 const _chartObs = new MutationObserver(() => {

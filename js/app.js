@@ -340,6 +340,8 @@ createApp({
     watch(nightMode, (v) => {
       document.body.classList.toggle('night', v);
       localStorage.setItem('nightMode', v ? '1' : '0');
+      remountCharts();
+      if (selectedCoin.value) mountCoinChart();
     }, { immediate: true });
 
     // --- Computed coin rows (Upbit KRW vs Binance USDT) ---
