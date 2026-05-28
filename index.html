@@ -425,8 +425,9 @@
       <div class="chat-error" v-if="chatError">{{ chatError }}</div>
       <!-- Prediction row -->
       <div class="pred-input-row">
-        <input class="pred-sym-input" v-model="predSymbol" placeholder="BTC" maxlength="10"
-               @keyup.enter="submitPrediction" :disabled="!!predPending" />
+        <select class="pred-sym-input" v-model="predSymbol" :disabled="!!predPending">
+          <option v-for="sym in predSymbols" :key="sym" :value="sym">{{ sym }}</option>
+        </select>
         <input class="pred-price-input" v-model="predPrice" type="number" placeholder="가격 (USD)"
                @keyup.enter="submitPrediction" :disabled="!!predPending" />
         <input class="pred-bet-input" v-model="predBet" type="number" placeholder="배팅 (p)" min="1" :max="predScore.points"

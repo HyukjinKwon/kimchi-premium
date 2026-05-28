@@ -754,8 +754,8 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
   flex-shrink: 0;
 }
 .pred-sym-input {
-  width: 52px;
-  padding: 8px 6px;
+  width: 58px;
+  padding: 8px 4px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
@@ -764,7 +764,9 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
   text-transform: uppercase;
   outline: none;
   flex-shrink: 0;
+  cursor: pointer;
 }
+.pred-sym-input:disabled { opacity: 0.6; cursor: default; }
 .pred-price-input {
   width: 90px;
   flex-shrink: 0;

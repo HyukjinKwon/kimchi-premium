@@ -146,6 +146,7 @@ createApp({
     }
 
     // ── Prediction system ─────────────────────────────────────────────────────
+    const predSymbols   = ['BTC', 'ETH', 'XRP', 'SOL'];
     const predSymbol    = ref('BTC');
     const predPrice     = ref('');
     const predBet       = ref('');
@@ -278,7 +279,7 @@ createApp({
     });
 
     async function submitPrediction() {
-      const sym = predSymbol.value.trim().toUpperCase();
+      const sym = predSymbol.value;
       const target = parseFloat(predPrice.value);
       const bet = Math.min(parseInt(predBet.value) || 0, predScore.points);
       if (!sym || !target || target <= 0 || bet <= 0) return;
@@ -972,7 +973,7 @@ createApp({
       nightMode, searchStr, showFilter, showCharts, showAlarm, showChat, showNews, showLiq,
       chatName, chatEmoji, chatDisplayName, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
       sendChatMessage, saveNickname, deleteMessage, resetAllPoints,
-      predSymbol, predPrice, predBet, predSubmitting, predError, predPending, predCountdown, predScore, predRank, submitPrediction,
+      predSymbol, predSymbols, predPrice, predBet, predSubmitting, predError, predPending, predCountdown, predScore, predRank, submitPrediction,
       status, favCoins, showFavOnly, alarms,
       initialLoading,
       sortKey, sortDir,
