@@ -318,10 +318,13 @@ const ExchangeManager = (() => {
     const prioritySet = new Set(PRIORITY_SYMS);
     const remainingAll = defaultSymbols.filter(s => !prioritySet.has(s));
     if (!cachedSymbols) emit('symbols', defaultSymbols); // first visit: expand table early
-    if (remainingAll.length) fetchAndStreamUpbitTickers(remainingAll); // ~20ms per batch
+    const remainingTickersP = remainingAll.length
+      ? fetchAndStreamUpbitTickers(remainingAll)
+      : Promise.resolve();
 
-    // Now wait for Binance prices — needed for premiums and to trim non-Binance symbols
-    const binancePrices = await binancePricesP;
+    // Wait for both Binance prices and remaining Upbit tickers together so the
+    // full table renders with all prices already populated (avoids "only N coins" on slow mobile)
+    const [binancePrices] = await Promise.all([binancePricesP, remainingTickersP]);
     const binancePriceSet = new Set(Object.keys(binancePrices));
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);

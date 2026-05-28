@@ -341,6 +341,7 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
 @media (max-width: 768px) {
   /* Nav: hide button text labels, tighten spacing */
   .btn-label { display: none; }
+  .nav-status-label { display: none; }
   .btn-night { padding: 5px 9px; font-size: 13px; }
   .nav-right { gap: 4px; }
   #topNav { padding: 0 10px; }

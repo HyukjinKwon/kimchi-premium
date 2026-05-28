@@ -60,18 +60,21 @@ createApp({
     }
 
     function generateEmoji() {
-      // Unicode emoji blocks: smileys, people, animals, food, travel, objects, symbols, flags + extras
-      const ranges = [
-        [0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],
-        [0x1FA00,0x1FA6F],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF],
-        [0x1F1E6,0x1F1FF],[0x1F000,0x1F0FF],[0x1F100,0x1F1AC],
-        [0x1F200,0x1F2FF],[0x2300,0x23FF],[0x25A0,0x27FF],[0x2B00,0x2BFF],
-        [0x1F780,0x1F7FF],[0x1F800,0x1F8FF],
+      const emojis = [
+        '😀','😂','😅','😍','🤔','😎','🥳','🤩','😱','🙄','😴','🤣','😇','🥰','😤',
+        '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵',
+        '🐔','🐧','🐦','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🦋','🐌','🐞',
+        '🐢','🐍','🦎','🦕','🐙','🦑','🦀','🐡','🐠','🐟','🐬','🐳','🦈','🐊','🐅',
+        '🐆','🦓','🐘','🦛','🐪','🐫','🦒','🦘','🐃','🐄','🐎','🐏','🐑','🐐','🐕',
+        '🐈','🦃','🦚','🦜','🦢','🦩','🕊','🐇','🦝','🦨','🦡','🦦','🦥','🐿','🦔',
+        '🌸','🌺','🌻','🌹','🌷','🌼','💐','🍀','🌴','🌵','🍄','🌊','🔥','⭐','🌙',
+        '🍎','🍊','🍋','🍇','🍓','🍒','🍑','🥭','🍍','🥝','🍅','🫐','🍕','🍔','🌮',
+        '🍜','🍣','🍩','🎂','🍦','🧁','🍫','🍿','🧃','🍺','🧋','🫖',
+        '⚽','🏀','🏈','⚾','🎾','🏐','🎱','🏓','🎯','🎮','🎲','🎻','🎸','🥁','🎹',
+        '🚀','🛸','✈','🚂','🚢','🏎','🛺','🚁','🛻','🚒',
+        '💎','💰','🔑','🎁','🎉','🏆','🥇','🎊','🎈','✨','💫','🌈','☄','🎭','🎨',
       ];
-      const pool = [];
-      for (const [lo, hi] of ranges)
-        for (let cp = lo; cp <= hi; cp++) pool.push(String.fromCodePoint(cp));
-      return pool[Math.floor(Math.random() * pool.length)];
+      return emojis[Math.floor(Math.random() * emojis.length)];
     }
 
     const _savedName = localStorage.getItem('chatName');
@@ -509,7 +512,7 @@ createApp({
     // CoinMarketCap top-N by market cap (excluding stablecoins and BNB/TRX which are not on Upbit KRW).
     // CMC overall ranks (including stablecoins) are preserved for accurate badge display.
     // Bump FAV_VERSION whenever CMC_TOP10 changes to reset stale localStorage defaults.
-    const FAV_VERSION = 'v3';
+    const FAV_VERSION = 'v4';
     const CMC_TOP10 = [
       { sym: 'BTC',  rank: 1 },
       { sym: 'ETH',  rank: 2 },

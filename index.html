@@ -66,10 +66,10 @@
   <nav id="topNav">
     <a class="nav-brand" href="/">실시간김프</a>
     <div class="nav-right">
-      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-right:8px;font-size:11px;color:#888;line-height:1.3">
-        <span><span class="status-dot" :class="status.upbit"></span>Upbit</span>
-        <span><span class="status-dot" :class="status.binance"></span>Binance</span>
-      </div>
+      <span style="font-size:11px;color:#888;margin-right:8px;white-space:nowrap">
+        <span class="status-dot" :class="status.upbit"></span><span class="nav-status-label">Upbit</span>
+        <span class="status-dot" :class="status.binance" style="margin-left:5px"></span><span class="nav-status-label">Binance</span>
+      </span>
       <button class="btn-night" :class="{active: showCharts}" @click="showCharts=!showCharts" style="margin-right:6px">
         📈<span class="btn-label"> Charts</span>
       </button>
