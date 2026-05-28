@@ -28,6 +28,8 @@ body.night {
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { overflow-x: hidden; max-width: 100%; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
@@ -362,7 +364,10 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
 
   /* Premium card */
   .premium-card { gap: 12px; padding: 14px 12px; flex-wrap: wrap; }
-  .premium-card .ex-price { font-size: 16px; }
+  .premium-exchanges { max-width: 100%; }
+  .premium-card .ex-block { flex: 1 1 0; min-width: 0; }
+  .premium-card .ex-price { font-size: 16px; min-width: 0; }
+  .premium-card .ex-name { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .premium-result .pct { font-size: 22px; }
 
   /* Coin table — 5 visible columns on mobile, keep it tight */
@@ -374,7 +379,6 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
   table.coin-table th:nth-child(5) { width: 15% !important; }
   table.coin-table th:nth-child(7) { width: 23% !important; }
   .coin-icon { width: 16px; height: 16px; }
-  .premium-card .ex-block { min-width: 0; }
   .coin-symbol { font-size: 11px; }
   .coin-cell { gap: 3px; }
   .fav-btn { font-size: 11px; }
