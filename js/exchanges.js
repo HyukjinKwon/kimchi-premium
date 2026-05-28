@@ -230,38 +230,31 @@ const ExchangeManager = (() => {
     } catch(e) { return {}; }
   }
 
-  // Fetch Upbit tickers in parallel batches of 100 (Upbit's max per request).
-  async function fetchAndStreamUpbitTickers(symbols, retry = 1) {
-    const batches = [];
-    for (let i = 0; i < symbols.length; i += 100)
-      batches.push(symbols.slice(i, i + 100));
-
-    const failed = [];
-    await Promise.all(batches.map(async batch => {
-      try {
-        const markets = batch.map(s => `KRW-${s}`).join(',');
-        const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(markets)}`);
-        if (!r.ok) { failed.push(...batch); return; }
-        const list = await r.json();
-        if (!Array.isArray(list)) { failed.push(...batch); return; }
-        list.forEach(t => {
-          const sym = t.market.replace('KRW-', '');
-          const d = {
-            price: t.trade_price,
-            change: t.signed_change_rate,
-            volume: t.acc_trade_price_24h / 1e8,
-            high: t.high_price,
-            low: t.low_price,
-          };
-          state.upbit[sym] = d;
-          emit('upbit', { symbol: sym, data: d, prev: null });
-        });
-      } catch(e) { failed.push(...batch); }
-    }));
-
-    if (failed.length && retry > 0) {
-      await new Promise(r => setTimeout(r, 600));
-      await fetchAndStreamUpbitTickers(failed, retry - 1);
+  // Single request for all symbols — simpler and avoids parallel 429s from batching.
+  async function fetchAllUpbitTickers(symbols, retry = 1) {
+    try {
+      const markets = symbols.map(s => `KRW-${s}`).join(',');
+      const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(markets)}`);
+      if (!r.ok) throw new Error(r.status);
+      const list = await r.json();
+      if (!Array.isArray(list)) throw new Error('bad response');
+      list.forEach(t => {
+        const sym = t.market.replace('KRW-', '');
+        const d = {
+          price: t.trade_price,
+          change: t.signed_change_rate,
+          volume: t.acc_trade_price_24h / 1e8,
+          high: t.high_price,
+          low: t.low_price,
+        };
+        state.upbit[sym] = d;
+        emit('upbit', { symbol: sym, data: d, prev: null });
+      });
+    } catch(e) {
+      if (retry > 0) {
+        await new Promise(r => setTimeout(r, 800));
+        await fetchAllUpbitTickers(symbols, retry - 1);
+      }
     }
   }
 
@@ -313,27 +306,23 @@ const ExchangeManager = (() => {
 
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
-    // Start both slow fetches in parallel
+    // Start both fetches in parallel
     const upbitMarketsP = fetchUpbitMarkets();   // ~30ms,  56KB
     const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB
 
     const upbitSymbols = await upbitMarketsP;
     const HARDCODED_FALLBACK = ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
       'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
-    // If Upbit markets fetch failed, use cached symbols so the full list is preserved
+    // Use cached symbols as fallback if Upbit markets fetch failed
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
       (cachedSymbols || HARDCODED_FALLBACK);
 
-    if (!cachedSymbols) emit('symbols', defaultSymbols); // first visit: expand table early
+    if (!cachedSymbols) emit('symbols', defaultSymbols);
 
-    // Fetch ALL Upbit tickers (priority + remaining) and await with Binance prices
-    // so every coin has both prices before the table renders (fixes "only N coins" on mobile)
-    const prioritySet = new Set(PRIORITY_SYMS);
-    const remainingAll = defaultSymbols.filter(s => !prioritySet.has(s));
+    // Single request for all Upbit tickers — no batching, no parallel 429s
     const [binancePrices] = await Promise.all([
       binancePricesP,
-      fetchAndStreamUpbitTickers(PRIORITY_SYMS),
-      ...(remainingAll.length ? [fetchAndStreamUpbitTickers(remainingAll)] : []),
+      fetchAllUpbitTickers(defaultSymbols),
     ]);
     const binancePriceSet = new Set(Object.keys(binancePrices));
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));

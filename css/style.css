@@ -342,12 +342,12 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
   /* Nav: hide button text labels, tighten spacing */
   .btn-label { display: none; }
   .nav-status-label { display: none; }
-  .btn-night { padding: 5px 9px; font-size: 13px; }
-  .nav-right { gap: 4px; }
-  #topNav { padding: 0 10px; }
+  .btn-night { padding: 5px 7px; font-size: 13px; }
+  .nav-right { gap: 6px; }
+  #topNav { padding: 0 8px; }
 
   /* Top bar: allow wrapping into 2×2 grid */
-  #topBar { gap: 6px 14px; justify-content: space-between; padding: 6px 10px; }
+  #topBar { gap: 6px 14px; justify-content: space-between; padding: 6px 8px; }
   .top-item { flex: 0 0 calc(50% - 8px); }
 
   /* Premium card */

@@ -70,16 +70,16 @@
         <span class="status-dot" :class="status.upbit"></span><span class="nav-status-label">Upbit</span>
         <span class="status-dot" :class="status.binance" style="margin-left:5px"></span><span class="nav-status-label">Binance</span>
       </span>
-      <button class="btn-night" :class="{active: showCharts}" @click="showCharts=!showCharts" style="margin-right:6px">
+      <button class="btn-night" :class="{active: showCharts}" @click="showCharts=!showCharts">
         📈<span class="btn-label"> Charts</span>
       </button>
-      <button class="btn-night" :class="{active: showNews}" @click="showNews=!showNews" style="margin-right:6px">
+      <button class="btn-night" :class="{active: showNews}" @click="showNews=!showNews">
         📰<span class="btn-label"> News</span>
       </button>
-      <button class="btn-night" :class="{active: showLiq}" @click="showLiq=!showLiq" style="margin-right:6px">
+      <button class="btn-night" :class="{active: showLiq}" @click="showLiq=!showLiq">
         ⚡<span class="btn-label"> Liq</span>
       </button>
-      <button class="btn-night" :class="{active: showChat}" @click="showChat=!showChat" style="margin-right:6px">
+      <button class="btn-night" :class="{active: showChat}" @click="showChat=!showChat">
         💬<span class="btn-label"> Chat</span>
       </button>
       <button class="btn-night" @click="nightMode = !nightMode">
