@@ -179,7 +179,7 @@ const ExchangeManager = (() => {
   }
 
   // --- Init ---
-  async function fetchUpbitMarkets(retry = 1) {
+  async function fetchUpbitMarkets(retry = 4) {
     try {
       const r = await fetch('https://api.upbit.com/v1/market/all?isDetails=false');
       if (!r.ok) throw new Error(r.status);
@@ -187,7 +187,7 @@ const ExchangeManager = (() => {
       return d.filter(m => m.market.startsWith('KRW-')).map(m => m.market.replace('KRW-', ''));
     } catch(e) {
       if (retry > 0) {
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 800));
         return fetchUpbitMarkets(retry - 1);
       }
       return [];
@@ -300,7 +300,8 @@ const ExchangeManager = (() => {
     let cachedSymbols = null;
     try {
       const s = JSON.parse(localStorage.getItem('commonSymbols') || 'null');
-      if (Array.isArray(s) && s.length) cachedSymbols = s;
+      // Only trust the cache if it's a meaningful full list (not a fallback)
+      if (Array.isArray(s) && s.length > 50) cachedSymbols = s;
     } catch(e) {}
     emit('symbols', cachedSymbols || PRIORITY_SYMS);
 
@@ -311,11 +312,10 @@ const ExchangeManager = (() => {
     const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB
 
     const upbitSymbols = await upbitMarketsP;
-    const HARDCODED_FALLBACK = ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
-      'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
-    // Use cached symbols as fallback if Upbit markets fetch failed
+    // Use cached symbols as fallback if Upbit markets fetch failed.
+    // cachedSymbols is only set when it has >50 coins, so this is always a full list.
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
-      (cachedSymbols || HARDCODED_FALLBACK);
+      (cachedSymbols || PRIORITY_SYMS);
 
     if (!cachedSymbols) emit('symbols', defaultSymbols);
 
@@ -329,8 +329,11 @@ const ExchangeManager = (() => {
     emit('symbols', commonSymbols);
     emit('binance-prices', binancePrices);
 
-    // Cache for next visit so the full table renders at t=0
-    try { localStorage.setItem('commonSymbols', JSON.stringify(commonSymbols)); } catch(e) {}
+    // Cache for next visit so the full table renders at t=0.
+    // Only cache if we have a full list — never overwrite a good cache with a small fallback.
+    if (commonSymbols.length > 50) {
+      try { localStorage.setItem('commonSymbols', JSON.stringify(commonSymbols)); } catch(e) {}
+    }
 
     // Load heavy 24hr stats in background — updates change %, volume, high, low
     fetchBinanceMarkets().then(binanceData => {
