@@ -360,7 +360,8 @@
       <div class="chat-error" v-if="chatError">{{ chatError }}</div>
       <div class="chat-input-row">
         <input class="chat-input" v-model="chatInput" placeholder="Type a message..."
-               maxlength="300" @keyup.enter="sendChatMessage" :disabled="chatSending" />
+               maxlength="300" @keyup.enter="sendChatMessage" :disabled="chatSending"
+               ref="chatInputEl" />
         <button class="chat-send-btn" @click="sendChatMessage" :disabled="chatSending || !chatInput.trim()">
           {{ chatSending ? '...' : '전송' }}
         </button>

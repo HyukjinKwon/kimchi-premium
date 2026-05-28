@@ -66,6 +66,7 @@ createApp({
 
     const chatEditingNick = ref(false);
     const chatInput = ref('');
+    const chatInputEl = ref(null);
     const chatMessages = ref([]);
     const chatSending = ref(false);
     const chatError = ref('');
@@ -115,8 +116,6 @@ createApp({
     async function sendChatMessage() {
       const text = chatInput.value.trim();
       if (!text || chatSending.value) return;
-      const last = parseInt(localStorage.getItem('chatLastSent') || '0');
-      if (Date.now() - last < 4000) { chatError.value = '잠시 후 다시 시도하세요.'; return; }
       chatSending.value = true;
       chatError.value = '';
       try {
@@ -127,12 +126,13 @@ createApp({
           text,
           ts: firebase.database.ServerValue.TIMESTAMP,
         });
-        localStorage.setItem('chatLastSent', String(Date.now()));
         chatInput.value = '';
       } catch(e) {
-        chatError.value = 'Firebase 설정을 확인해 주세요.';
+        chatError.value = 'Failed to send. Please try again.';
       } finally {
         chatSending.value = false;
+        await nextTick();
+        chatInputEl.value?.focus();
       }
     }
 
@@ -709,7 +709,7 @@ createApp({
     return {
       usdKrw, jpyKrw, btcDominance, coinbaseUsdPremium, usdtKrwPrice,
       nightMode, searchStr, showFilter, showCharts, showAlarm, showChat, showNews, showLiq,
-      chatName, chatEmoji, chatEditingNick, chatInput, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
+      chatName, chatEmoji, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
       sendChatMessage, saveNickname,
       status, favCoins, showFavOnly, alarms,
       sortKey, sortDir,
