@@ -8,7 +8,7 @@ const {
   pctClass, premiumClass, fmtVolume,
   fmtTradePrice, fmtTradeQty,
   fmtLiqUsd, fmtLiqPrice,
-  newsAge, coinIcon,
+  newsAge, coinIcon, createRateLimiter,
 } = require('../js/utils.js');
 
 // ── fmtKrw ───────────────────────────────────────────────────────────────────
@@ -96,4 +96,60 @@ test('newsAge returns days', () => {
 test('coinIcon returns lowercase URL', () => {
   assert.ok(coinIcon('BTC').includes('/btc.png'));
   assert.ok(coinIcon('ETH').includes('/eth.png'));
+});
+
+// ── createRateLimiter ─────────────────────────────────────────────────────────
+test('rateLimiter allows first 4 sends', () => {
+  const rl = createRateLimiter({ limit: 4, window: 15_000, block: 60_000 });
+  let t = 1000;
+  assert.equal(rl.try(t += 100).ok, true);
+  assert.equal(rl.try(t += 100).ok, true);
+  assert.equal(rl.try(t += 100).ok, true);
+  assert.equal(rl.try(t += 100).ok, true);
+});
+
+test('rateLimiter blocks on 5th send within window', () => {
+  const rl = createRateLimiter({ limit: 4, window: 15_000, block: 60_000 });
+  let t = 1000;
+  rl.try(t += 100);
+  rl.try(t += 100);
+  rl.try(t += 100);
+  rl.try(t += 100);
+  const result = rl.try(t += 100);
+  assert.equal(result.ok, false);
+  assert.equal(result.retryAfter, 60);
+});
+
+test('rateLimiter stays blocked during block period', () => {
+  const rl = createRateLimiter({ limit: 4, window: 15_000, block: 60_000 });
+  let t = 1000;
+  rl.try(t += 100); rl.try(t += 100); rl.try(t += 100); rl.try(t += 100);
+  rl.try(t += 100); // triggers block
+  assert.equal(rl.try(t += 30_000).ok, false); // 30s later, still blocked
+});
+
+test('rateLimiter unblocks after block period expires', () => {
+  const rl = createRateLimiter({ limit: 4, window: 15_000, block: 60_000 });
+  let t = 1000;
+  rl.try(t += 100); rl.try(t += 100); rl.try(t += 100); rl.try(t += 100);
+  rl.try(t += 100); // triggers block at t=1500, blockedUntil=61500
+  assert.equal(rl.try(t + 61_000).ok, true); // 61s after block: unblocked
+});
+
+test('rateLimiter resets counter after window slides', () => {
+  const rl = createRateLimiter({ limit: 4, window: 15_000, block: 60_000 });
+  let t = 0;
+  rl.try(t += 100); rl.try(t += 100); rl.try(t += 100); rl.try(t += 100);
+  // now slide past the window
+  assert.equal(rl.try(t + 20_000).ok, true); // old timestamps expired
+});
+
+test('rateLimiter retryAfter decrements correctly', () => {
+  const rl = createRateLimiter({ limit: 4, window: 15_000, block: 60_000 });
+  let t = 1000;
+  rl.try(t += 100); rl.try(t += 100); rl.try(t += 100); rl.try(t += 100);
+  rl.try(t += 100); // block starts at t=1500
+  const r = rl.try(t + 10_000); // 10s into block
+  assert.equal(r.ok, false);
+  assert.equal(r.retryAfter, 50); // 60 - 10 = 50s remaining
 });

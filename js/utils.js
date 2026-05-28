@@ -83,6 +83,26 @@ function coinIcon(symbol) {
   return `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/${symbol.toLowerCase()}.png`;
 }
 
+// Sliding-window rate limiter.
+// limit=4 → 4 sends allowed per window; 5th send within the window is blocked.
+function createRateLimiter({ limit = 4, window: win = 15_000, block = 60_000 } = {}) {
+  const ts = [];
+  let blockedUntil = 0;
+  return {
+    try(now = Date.now()) {
+      if (now < blockedUntil)
+        return { ok: false, retryAfter: Math.ceil((blockedUntil - now) / 1000) };
+      while (ts.length && now - ts[0] > win) ts.shift();
+      if (ts.length >= limit) {
+        blockedUntil = now + block;
+        return { ok: false, retryAfter: Math.ceil(block / 1000) };
+      }
+      ts.push(now);
+      return { ok: true };
+    },
+  };
+}
+
 // Export for Node.js (tests); in browser these are already globals
 if (typeof module !== 'undefined') {
   module.exports = {
@@ -91,5 +111,6 @@ if (typeof module !== 'undefined') {
     fmtTradePrice, fmtTradeQty,
     fmtLiqUsd, fmtLiqPrice,
     newsAge, coinIcon,
+    createRateLimiter,
   };
 }
