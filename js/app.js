@@ -495,7 +495,6 @@ createApp({
             binanceVolume: d.volume,
             binanceUpDown,
           });
-          if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
         });
       } else if (event === 'binance-prices') {
         Object.entries(data).forEach(([symbol, price]) => {
