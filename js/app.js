@@ -1,4 +1,4 @@
-const { createApp, ref, computed, reactive, onMounted, watch } = Vue;
+const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
 
 createApp({
   setup() {
@@ -11,24 +11,293 @@ createApp({
     const nightMode = ref(localStorage.getItem('nightMode') === '1');
     const searchStr = ref('');
     const showFilter = ref(false);
-    const showCharts = ref(false);
+    const showCharts = ref(true);
     const showAlarm = ref(false);
-    const status = reactive({ upbit: 'disconnected', binance: 'disconnected', bithumb: 'disconnected' });
-    const favCoins = ref(new Set(JSON.parse(localStorage.getItem('favCoins') || '[]')));
-    const showFavOnly = ref(false);
+    const showChat = ref(true);
+    const showNews = ref(true);
+    const showLiq  = ref(true);
+
+    // ── Chat (Firebase Realtime Database) ────────────────────────────────────
+    // Paste your config from: Firebase console → Project Settings → Your apps → SDK setup
+    const FIREBASE_CONFIG = {
+      apiKey:            'YOUR_API_KEY',
+      authDomain:        'YOUR_PROJECT.firebaseapp.com',
+      databaseURL:       'https://realtimekimp-default-rtdb.asia-southeast1.firebasedatabase.app',
+      projectId:         'YOUR_PROJECT',
+      storageBucket:     'YOUR_PROJECT.appspot.com',
+      messagingSenderId: 'YOUR_SENDER_ID',
+      appId:             'YOUR_APP_ID',
+    };
+
+    let _firebaseReady = false;
+    function getDb() {
+      if (!_firebaseReady) {
+        firebase.initializeApp(FIREBASE_CONFIG);
+        _firebaseReady = true;
+      }
+      return firebase.database();
+    }
+
+    function generateNickname() {
+      const adj  = ['빠른','강한','숨은','황금','번개','비밀','용감한','날쌘'];
+      const noun = ['고래','황소','상어','독수리','곰','여우','늑대','새우'];
+      return adj[Math.floor(Math.random()*adj.length)]
+           + noun[Math.floor(Math.random()*noun.length)]
+           + Math.floor(Math.random()*100);
+    }
+
+    function generateEmoji() {
+      const pool = ['🐋','🐂','🦈','🦅','🐻','🦊','🐺','🦁','🐉','🦄',
+                    '🐬','🦝','🐯','🦋','🐙','🦖','🐸','🦩','🐧','🦔'];
+      // Pick two independent random indices; if they match, return single emoji
+      // → 20 singles + 380 unique pairs = 400 distinct combinations
+      const a = Math.floor(Math.random() * pool.length);
+      const b = Math.floor(Math.random() * pool.length);
+      return a === b ? pool[a] : pool[a] + pool[b];
+    }
+
+    const _savedName = localStorage.getItem('chatName');
+    const chatName = ref(_savedName || generateNickname());
+    if (!_savedName) localStorage.setItem('chatName', chatName.value);
+
+    const _savedEmoji = localStorage.getItem('chatEmoji');
+    const chatEmoji = ref(_savedEmoji || generateEmoji());
+    if (!_savedEmoji) localStorage.setItem('chatEmoji', chatEmoji.value);
+
+    const chatEditingNick = ref(false);
+    const chatInput = ref('');
+    const chatMessages = ref([]);
+    const chatSending = ref(false);
+    const chatError = ref('');
+    const chatScrollEl = ref(null);
+
+    function saveNickname() {
+      if (!chatName.value.trim()) chatName.value = generateNickname();
+      localStorage.setItem('chatName', chatName.value);
+      chatEditingNick.value = false;
+    }
+
+    const onlineCount = ref(0);
+
+    function initChat() {
+      try {
+        const db = getDb();
+
+        // ── Presence tracking ──────────────────────────────────────────────
+        // Use a per-tab session ID so each open tab counts separately
+        const sessionId = sessionStorage.getItem('chatSession') || Math.random().toString(36).slice(2);
+        sessionStorage.setItem('chatSession', sessionId);
+
+        db.ref('.info/connected').on('value', (snap) => {
+          if (!snap.val()) return;
+          const presenceRef = db.ref(`presence/${sessionId}`);
+          presenceRef.onDisconnect().remove(); // auto-remove when tab closes
+          presenceRef.set({ name: chatName.value, emoji: chatEmoji.value, ts: Date.now() });
+        });
+
+        db.ref('presence').on('value', (snap) => {
+          onlineCount.value = snap.numChildren();
+        });
+
+        // ── Messages ───────────────────────────────────────────────────────
+        const since = Date.now() - 24 * 60 * 60 * 1000;
+        db.ref('messages').orderByChild('ts').startAt(since).limitToLast(50).on('value', async (snap) => {
+          const data = snap.val();
+          chatMessages.value = data
+            ? Object.entries(data).map(([id, m]) => ({ id, ...m })).sort((a, b) => a.ts - b.ts)
+            : [];
+          await nextTick();
+          if (chatScrollEl.value) chatScrollEl.value.scrollTop = chatScrollEl.value.scrollHeight;
+        });
+      } catch(e) {}
+    }
+
+    async function sendChatMessage() {
+      const text = chatInput.value.trim();
+      if (!text || chatSending.value) return;
+      const last = parseInt(localStorage.getItem('chatLastSent') || '0');
+      if (Date.now() - last < 4000) { chatError.value = '잠시 후 다시 시도하세요.'; return; }
+      chatSending.value = true;
+      chatError.value = '';
+      try {
+        const db = getDb();
+        await db.ref('messages').push({
+          from: chatName.value,
+          emoji: chatEmoji.value,
+          text,
+          ts: firebase.database.ServerValue.TIMESTAMP,
+        });
+        localStorage.setItem('chatLastSent', String(Date.now()));
+        chatInput.value = '';
+      } catch(e) {
+        chatError.value = 'Firebase 설정을 확인해 주세요.';
+      } finally {
+        chatSending.value = false;
+      }
+    }
+
+    const status = reactive({ upbit: 'disconnected', binance: 'disconnected' });
+    const STABLECOINS = new Set(['USDT', 'USDC', 'USDS', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'PYUSD', 'USDP']);
+    const _savedFavs = new Set(JSON.parse(localStorage.getItem('favCoins') || '[]'));
+    STABLECOINS.forEach(s => _savedFavs.delete(s)); // purge stablecoins on every load
+    const favCoins = ref(_savedFavs);
+    const showFavOnly = ref(_savedFavs.size > 0);
     const alarms = ref(JSON.parse(localStorage.getItem('alarms') || '[]'));
 
-    // Sorting
-    const sortKey = ref('pct');
-    const sortDir = ref(-1); // -1 = desc
+    // Sorting — default: market-cap rank ascending
+    const sortKey = ref('top20Rank');
+    const sortDir = ref(-1);
 
-    // Active tab: which exchange pair to show
-    const activePair = ref('upbit-binance'); // upbit-binance | bithumb-binance | upbit-coinbase
+    // --- Coin chart ---
+    const selectedCoin = ref(null);
+    const chartExchange = ref('upbit');
+    const chartMarket = ref('KRW');
+    const chartInterval = ref('60');
+    const chartIntervals = [
+      { value: '1', label: '1m' }, { value: '3', label: '3m' },
+      { value: '5', label: '5m' }, { value: '15', label: '15m' },
+      { value: '30', label: '30m' }, { value: '60', label: '1H' },
+      { value: '240', label: '4H' }, { value: '1D', label: '1D' },
+      { value: '1W', label: '1W' }, { value: '1M', label: '1M' },
+    ];
+
+    function buildTvSymbol(coin, exchange, market) {
+      if (exchange === 'upbit') return `UPBIT:${coin}KRW`;
+      return market === 'BTC' ? `BINANCE:${coin}BTC` : `BINANCE:${coin}USDT`;
+    }
+
+    // --- Real-time trade stream (Upbit or Binance) ---
+    let tradeWs = null;
+    let tradeGeneration = 0;
+    const recentTrades = ref([]);
+    let _tradeBuf = [];
+    let _tradeRaf = null;
+
+    function _flushTradeBuf(gen) {
+      _tradeRaf = null;
+      if (tradeGeneration !== gen || _tradeBuf.length === 0) { _tradeBuf = []; return; }
+      const batch = _tradeBuf.reverse();
+      _tradeBuf = [];
+      recentTrades.value = [...batch, ...recentTrades.value].slice(0, 30);
+    }
+
+    function connectTradeStream(symbol, exchange) {
+      if (_tradeRaf !== null) { cancelAnimationFrame(_tradeRaf); _tradeRaf = null; }
+      if (tradeWs) { tradeWs.close(); tradeWs = null; }
+      _tradeBuf = [];
+      recentTrades.value = [];
+      const gen = ++tradeGeneration;
+
+      if (exchange === 'upbit') {
+        const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+        tradeWs = ws;
+        ws.onopen = () => {
+          ws.send(JSON.stringify([
+            { ticket: 'kimchi-trade' },
+            { type: 'trade', codes: [`KRW-${symbol}`], isOnlyRealtime: true },
+          ]));
+        };
+        ws.onmessage = async (e) => {
+          if (tradeGeneration !== gen) return;
+          const text = new TextDecoder().decode(await e.data.arrayBuffer());
+          const d = JSON.parse(text);
+          if (d.type !== 'trade') return;
+          _tradeBuf.push({ id: d.sequential_id || Date.now(), price: d.trade_price, qty: d.trade_volume, isBuy: d.ask_bid === 'BID', time: new Date(d.trade_timestamp) });
+          if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
+        };
+        ws.onerror = () => ws.close();
+        ws.onclose  = () => { if (tradeWs === ws) tradeWs = null; };
+      } else {
+        const market = chartMarket.value === 'BTC' ? 'btc' : 'usdt';
+        const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}${market}@trade`);
+        tradeWs = ws;
+        ws.onmessage = (e) => {
+          if (tradeGeneration !== gen) return;
+          const d = JSON.parse(e.data);
+          _tradeBuf.push({ id: d.t, price: parseFloat(d.p), qty: parseFloat(d.q), isBuy: !d.m, time: new Date(d.T) });
+          if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
+        };
+        ws.onerror = () => { if (tradeWs === ws) { ws.close(); tradeWs = null; } };
+        ws.onclose  = () => { if (tradeWs === ws) tradeWs = null; };
+      }
+    }
+
+    function disconnectTradeStream() {
+      if (_tradeRaf !== null) { cancelAnimationFrame(_tradeRaf); _tradeRaf = null; }
+      tradeGeneration++;
+      if (tradeWs) { tradeWs.close(); tradeWs = null; }
+      _tradeBuf = [];
+      recentTrades.value = [];
+    }
+
+    function fmtTradePrice(n) {
+      if (!n) return '--';
+      if (n >= 10000) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (n >= 1000)  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (n >= 100)   return n.toFixed(3);
+      if (n >= 1)     return n.toFixed(4);
+      if (n >= 0.1)   return n.toFixed(5);
+      if (n >= 0.01)  return n.toFixed(6);
+      return n.toFixed(8);
+    }
+
+    function fmtTradeQty(n) {
+      if (n >= 100) return n.toFixed(1);
+      if (n >= 1) return n.toFixed(3);
+      return n.toFixed(5);
+    }
+
+    function mountCoinChart() {
+      const container = document.getElementById('coin-chart-container');
+      if (!container || !selectedCoin.value) return;
+      container.innerHTML = '';
+      new TradingView.widget({
+        autosize: true,
+        symbol: buildTvSymbol(selectedCoin.value, chartExchange.value, chartMarket.value),
+        interval: chartInterval.value,
+        timezone: 'Asia/Seoul',
+        theme: nightMode.value ? 'Dark' : 'Light',
+        style: '1',
+        locale: 'en',
+        enable_publishing: false,
+        allow_symbol_change: true,
+        container_id: 'coin-chart-container',
+      });
+    }
+
+    async function showCoinChart(symbol) {
+      if (selectedCoin.value === symbol) {
+        closeCoinChart();
+        return;
+      }
+      chartExchange.value = 'binance';
+      chartMarket.value = 'USDT';
+      selectedCoin.value = symbol;
+      connectTradeStream(symbol, 'binance');
+      await nextTick();
+      document.getElementById('coin-chart-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      mountCoinChart();
+    }
+
+    function closeCoinChart() {
+      selectedCoin.value = null;
+      disconnectTradeStream();
+    }
+
+    watch([chartExchange, chartMarket, chartInterval], ([newEx, newMkt], [oldEx, oldMkt]) => {
+      if (!selectedCoin.value) return;
+      mountCoinChart();
+      if (newEx !== oldEx || newMkt !== oldMkt) {
+        connectTradeStream(selectedCoin.value, newEx);
+      }
+    });
 
     // Price data keyed by symbol
     const prices = reactive({});
     // All known symbols (union of upbit + binance)
     const allSymbols = ref([]);
+    // Top-20 market cap: symbol -> rank (1-based)
+    const top20 = ref({});
 
     // --- Night mode ---
     watch(nightMode, (v) => {
@@ -36,17 +305,11 @@ createApp({
       localStorage.setItem('nightMode', v ? '1' : '0');
     }, { immediate: true });
 
-    // --- Computed coin rows ---
+    // --- Computed coin rows (Upbit KRW vs Binance USDT) ---
     const rows = computed(() => {
       let syms = allSymbols.value.filter(s => {
         const p = prices[s];
-        if (!p) return false;
-        const hasUpbit = p.upbitPrice > 0;
-        const hasBinance = p.binancePrice > 0;
-        if (activePair.value === 'upbit-binance') return hasUpbit && hasBinance;
-        if (activePair.value === 'bithumb-binance') return p.bithumbPrice > 0 && hasBinance;
-        if (activePair.value === 'upbit-coinbase') return hasUpbit && p.coinbasePrice > 0;
-        return hasUpbit && hasBinance;
+        return p && p.upbitPrice > 0 && p.binancePrice > 0;
       });
 
       if (showFavOnly.value) syms = syms.filter(s => favCoins.value.has(s));
@@ -57,42 +320,34 @@ createApp({
 
       return syms.map(s => {
         const p = prices[s];
-        let krwPrice = 0, usdPrice = 0, altKrwPrice = 0;
-
-        if (activePair.value === 'upbit-binance') {
-          krwPrice = p.upbitPrice;
-          usdPrice = p.binancePrice;
-        } else if (activePair.value === 'bithumb-binance') {
-          krwPrice = p.bithumbPrice;
-          usdPrice = p.binancePrice;
-        } else {
-          krwPrice = p.upbitPrice;
-          usdPrice = p.coinbasePrice;
-        }
-
+        const krwPrice = p.upbitPrice;
+        const usdPrice = p.binancePrice;
         const binanceKrw = usdKrw.value ? usdPrice * usdKrw.value : 0;
         const gap = binanceKrw ? krwPrice - binanceKrw : 0;
         const pct = binanceKrw ? gap / binanceKrw * 100 : 0;
-
+        const top20Rank = top20.value[s] ?? null;
         return {
           symbol: s,
           krwPrice,
           usdPrice,
           binanceKrw,
-          upbitPrice: p.upbitPrice,
-          bithumbPrice: p.bithumbPrice,
-          binancePrice: p.binancePrice,
-          coinbasePrice: p.coinbasePrice,
           gap,
           pct,
-          change: p.upbitChange ?? p.bithumbChange ?? 0,
-          binanceChange: p.binanceChange ?? 0,
+          change: p.upbitChange ?? 0,
           volume: p.upbitVolume ?? 0,
           upDown: p.upDown,
           binanceUpDown: p.binanceUpDown,
           isFav: favCoins.value.has(s),
+          isTop20: top20Rank !== null,
+          top20Rank,
         };
       }).sort((a, b) => {
+        // rank: always ascending with nulls (non-top20) at bottom
+        if (sortKey.value === 'top20Rank') {
+          const ra = a.top20Rank ?? 9999;
+          const rb = b.top20Rank ?? 9999;
+          return ra - rb;
+        }
         const va = a[sortKey.value] ?? 0;
         const vb = b[sortKey.value] ?? 0;
         if (typeof va === 'string') return sortDir.value * va.localeCompare(vb);
@@ -127,8 +382,8 @@ createApp({
     }
     function fmtUsd(n) {
       if (!n) return '--';
-      if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-      if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      if (n >= 1000) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (n >= 1)    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
       return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
     }
     function fmtPct(n) {
@@ -200,6 +455,8 @@ createApp({
         btcDominance.value = data.btcDominance;
       } else if (event === 'status') {
         Object.assign(status, data);
+      } else if (event === 'symbols') {
+        allSymbols.value = data.slice();
       } else if (event === 'upbit') {
         const { symbol, data: d, prev } = data;
         if (!prices[symbol]) prices[symbol] = {};
@@ -225,19 +482,6 @@ createApp({
           });
           if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
         });
-      } else if (event === 'bithumb') {
-        const { symbol, data: d } = data;
-        if (!prices[symbol]) prices[symbol] = {};
-        Object.assign(prices[symbol], {
-          bithumbPrice: d.price,
-          bithumbChange: d.change,
-        });
-        if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
-      } else if (event === 'coinbase') {
-        const { symbol, price } = data;
-        if (!prices[symbol]) prices[symbol] = {};
-        prices[symbol].coinbasePrice = price;
-        if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
       } else if (event === 'coinbase-premium') {
         coinbaseUsdPremium.value = data;
       }
@@ -251,23 +495,286 @@ createApp({
       }
     }
 
+    // CoinMarketCap top-10 by market cap (excluding stablecoins).
+    // CMC overall ranks (including stablecoins) are preserved for accurate badge display.
+    const CMC_TOP10 = [
+      { sym: 'BTC',  rank: 1 },
+      { sym: 'ETH',  rank: 2 },
+      { sym: 'XRP',  rank: 4 },
+      { sym: 'BNB',  rank: 5 },
+      { sym: 'SOL',  rank: 6 },
+      { sym: 'DOGE', rank: 8 },
+      { sym: 'ADA',  rank: 9 },
+      { sym: 'TRX',  rank: 10 },
+      { sym: 'AVAX', rank: 11 },
+      { sym: 'TON',  rank: 12 },
+    ];
+
+    function initFavorites() {
+      const map = {};
+      CMC_TOP10.forEach(({ sym, rank }) => {
+        map[sym] = rank;
+        favCoins.value.add(sym);
+      });
+      top20.value = map;
+      localStorage.setItem('favCoins', JSON.stringify([...favCoins.value]));
+      showFavOnly.value = true;
+    }
+
+    // ── Liquidation stream ─────────────────────────────────────────────────────
+    const recentLiqs = ref([]);
+    const liqLong24h = ref(0);
+    const liqShort24h = ref(0);
+    const liqStatus = ref('connecting');
+    const _liqHistory = [];
+    let _liqWs = null;
+    let _bybitWs = null;
+    let _okxWs = null;
+    const _okxCtVal = {};
+
+    function _recomputeLiq24h() {
+      const cutoff = Date.now() - 864e5;
+      while (_liqHistory.length && _liqHistory[0].ts < cutoff) _liqHistory.shift();
+      let lng = 0, sht = 0;
+      _liqHistory.forEach(l => { if (l.side === 'LONG') lng += l.usd; else sht += l.usd; });
+      liqLong24h.value = lng;
+      liqShort24h.value = sht;
+    }
+
+    function _pushLiq(symbol, side, usd, price, ts) {
+      _liqHistory.push({ ts, side, usd });
+      _recomputeLiq24h();
+      recentLiqs.value = [{ id: ts + '_' + symbol, symbol, side, usd, price, ts }, ...recentLiqs.value].slice(0, 50);
+    }
+
+    // Binance futures — all-market liquidation stream
+    function connectLiqStream() {
+      if (_liqWs) { _liqWs.close(); _liqWs = null; }
+      const ws = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
+      ws.onopen  = () => { liqStatus.value = 'connected'; };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        const o = d.o;
+        if (!o) return;
+        const side = o.S === 'SELL' ? 'LONG' : 'SHORT';
+        const usd  = parseFloat(o.ap) * parseFloat(o.z);
+        if (!usd) return;
+        _pushLiq(o.s.replace('USDT', ''), side, usd, parseFloat(o.ap), o.T || Date.now());
+      };
+      ws.onclose = () => { _liqWs = null; liqStatus.value = 'connecting'; setTimeout(connectLiqStream, 5000); };
+      ws.onerror  = () => ws.close();
+      _liqWs = ws;
+    }
+
+    // Bybit — per-symbol liquidation stream (top coins, fires more frequently)
+    const _BYBIT_SYMS = ['BTCUSDT','ETHUSDT','XRPUSDT','BNBUSDT','SOLUSDT',
+                         'DOGEUSDT','ADAUSDT','TRXUSDT','AVAXUSDT','SHIBUSDT',
+                         'DOTUSDT','LINKUSDT','LTCUSDT','NEARUSDT','UNIUSDT',
+                         'SUIUSDT','TONUSDT','BCHUSDT','FILUSDT','APTUSDT'];
+    function connectBybitLiqStream() {
+      if (_bybitWs) { _bybitWs.close(); _bybitWs = null; }
+      const ws = new WebSocket('wss://stream.bybit.com/v5/public/linear');
+      ws.onopen = () => {
+        liqStatus.value = 'connected';
+        ws.send(JSON.stringify({ op: 'subscribe', args: _BYBIT_SYMS.map(s => 'liquidation.' + s) }));
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (!d.topic || !d.data) return;
+        const o = d.data;
+        // Bybit: side "Sell" = forced sell = long was liquidated; "Buy" = short liq
+        const side = o.side === 'Sell' ? 'LONG' : 'SHORT';
+        const usd  = parseFloat(o.size) * parseFloat(o.price);
+        if (!usd) return;
+        _pushLiq(o.symbol.replace('USDT', ''), side, usd, parseFloat(o.price), o.updatedTime || Date.now());
+      };
+      ws.onclose = () => { _bybitWs = null; setTimeout(connectBybitLiqStream, 5000); };
+      ws.onerror  = () => ws.close();
+      _bybitWs = ws;
+    }
+
+    function fmtLiqUsd(n) {
+      if (!n) return '$0';
+      if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      return '$' + n.toFixed(0);
+    }
+
+    function fmtLiqPrice(n) {
+      if (!n) return '--';
+      if (n >= 10000) return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+      if (n >= 100)   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      if (n >= 1)     return n.toFixed(4);
+      return n.toFixed(6);
+    }
+
+    // ── OKX liquidation helpers ───────────────────────────────────────────────
+    async function fetchOKXInstruments() {
+      try {
+        const r = await fetch('https://www.okx.com/api/v5/public/instruments?instType=SWAP');
+        const d = await r.json();
+        if (d.code === '0') {
+          d.data.forEach(i => { _okxCtVal[i.instId] = parseFloat(i.ctVal) || 1; });
+        }
+      } catch(e) {}
+    }
+
+    function connectOKXLiqStream() {
+      if (_okxWs) { _okxWs.close(); _okxWs = null; }
+      const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+      ws.onopen = () => {
+        liqStatus.value = 'connected';
+        ws.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'liquidation-orders', instType: 'SWAP' }] }));
+      };
+      ws.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        if (!d.data || !Array.isArray(d.data)) return;
+        d.data.forEach(entry => {
+          if (!entry.instId || !entry.instId.endsWith('USDT-SWAP')) return;
+          const sym = entry.instId.replace('-USDT-SWAP', '');
+          const cv = _okxCtVal[entry.instId] || 1;
+          (entry.details || []).forEach(det => {
+            const side = det.side === 'sell' ? 'LONG' : 'SHORT';
+            const usd = parseFloat(det.sz) * cv * parseFloat(det.bkPx);
+            if (!usd) return;
+            _pushLiq(sym, side, usd, parseFloat(det.bkPx), parseInt(det.ts, 10) || Date.now());
+          });
+        });
+      };
+      ws.onclose = () => { _okxWs = null; setTimeout(connectOKXLiqStream, 5000); };
+      ws.onerror  = () => ws.close();
+      _okxWs = ws;
+    }
+
+    async function seedLiqFromOKX() {
+      try {
+        const liqR = await fetch('https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&state=filled&limit=100');
+        const liqD = await liqR.json();
+        if (liqD.code !== '0' || !Array.isArray(liqD.data)) return;
+
+        const items = [];
+        liqD.data.forEach(entry => {
+          if (!entry.instId.endsWith('USDT-SWAP')) return;
+          const sym = entry.instId.replace('-USDT-SWAP', '');
+          const cv  = _okxCtVal[entry.instId] || 1;
+          (entry.details || []).forEach(det => {
+            const side = det.side === 'sell' ? 'LONG' : 'SHORT';
+            const usd  = parseFloat(det.sz) * cv * parseFloat(det.bkPx);
+            const ts   = parseInt(det.ts, 10);
+            if (!usd || !ts) return;
+            _liqHistory.push({ ts, side, usd });
+            items.push({ id: 'okx_' + ts + '_' + sym, symbol: sym, side, usd, price: parseFloat(det.bkPx), ts });
+          });
+        });
+
+        if (items.length > 0) {
+          items.sort((a, b) => b.ts - a.ts);
+          recentLiqs.value = items.slice(0, 50);
+          _recomputeLiq24h();
+        }
+      } catch(e) {}
+    }
+
+    // ── News feed ─────────────────────────────────────────────────────────────
+    const cryptoNews = ref([]);
+    const newsStatus = ref('loading');
+
+    async function fetchNews() {
+      newsStatus.value = 'loading';
+
+      // Primary: CryptoCompare v1 (no API key needed, returns array directly)
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 6000);
+        const r = await fetch('https://min-api.cryptocompare.com/data/news/?lang=EN', { signal: ctrl.signal });
+        clearTimeout(tid);
+        if (r.ok) {
+          const d = await r.json();
+          const items = Array.isArray(d) ? d : (Array.isArray(d.Data) ? d.Data : null);
+          if (items && items.length > 0) {
+            cryptoNews.value = items.slice(0, 6).map(item => ({
+              id: String(item.id), title: item.title, url: item.url,
+              published_on: item.published_on,
+            }));
+            newsStatus.value = 'ok';
+            setTimeout(fetchNews, 5 * 60 * 1000);
+            return;
+          }
+        }
+      } catch(e) {}
+
+      // Fallback: rss2json proxy for RSS feeds
+      const RSS_FEEDS = [
+        'https://cointelegraph.com/rss',
+        'https://coindesk.com/arc/outboundfeeds/rss/',
+      ];
+      for (const feed of RSS_FEEDS) {
+        try {
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 8000);
+          const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feed);
+          const r = await fetch(url, { signal: ctrl.signal });
+          clearTimeout(tid);
+          const d = await r.json();
+          if (d.status === 'ok' && Array.isArray(d.items) && d.items.length > 0) {
+            cryptoNews.value = d.items.slice(0, 6).map(item => ({
+              id: item.guid || item.link, title: item.title, url: item.link,
+              published_on: Math.floor(new Date(item.pubDate).getTime() / 1000),
+            }));
+            newsStatus.value = 'ok';
+            setTimeout(fetchNews, 5 * 60 * 1000);
+            return;
+          }
+        } catch(e) {}
+      }
+      newsStatus.value = 'error';
+      setTimeout(fetchNews, 60 * 1000);
+    }
+
+    function newsAge(ts) {
+      const mins = Math.floor((Date.now() / 1000 - ts) / 60);
+      if (mins < 60) return mins + 'm';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h';
+      return Math.floor(hrs / 24) + 'd';
+    }
+
     onMounted(async () => {
       ExchangeManager.on(handleExchangeEvent);
       await ExchangeManager.init();
+      initFavorites();
       setInterval(checkAlarms, 5000);
+      initChat();
+      connectLiqStream();
+      connectBybitLiqStream();
+      // Fetch OKX instrument ctVals once, then seed history and start WS
+      fetchOKXInstruments().then(() => {
+        seedLiqFromOKX();
+        connectOKXLiqStream();
+      });
+      fetchNews();
     });
 
     return {
       usdKrw, jpyKrw, btcDominance, coinbaseUsdPremium, usdtKrwPrice,
-      nightMode, searchStr, showFilter, showCharts, showAlarm,
+      nightMode, searchStr, showFilter, showCharts, showAlarm, showChat, showNews, showLiq,
+      chatName, chatEmoji, chatEditingNick, chatInput, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
+      sendChatMessage, saveNickname,
       status, favCoins, showFavOnly, alarms,
-      sortKey, sortDir, activePair,
+      sortKey, sortDir,
       rows, btcRow,
       setSort, sortIcon,
       toggleFav,
       fmtKrw, fmtUsd, fmtPct, fmtPremium, pctClass, premiumClass, fmtVolume,
       coinIcon, onImgError,
       addAlarm, removeAlarm,
+      top20,
+      selectedCoin, chartExchange, chartMarket, chartInterval, chartIntervals,
+      showCoinChart, closeCoinChart,
+      recentTrades, fmtTradePrice, fmtTradeQty,
+      recentLiqs, liqLong24h, liqShort24h, liqStatus, fmtLiqUsd, fmtLiqPrice,
+      cryptoNews, newsStatus, newsAge,
     };
   }
 }).mount('#app');

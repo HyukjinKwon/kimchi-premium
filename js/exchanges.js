@@ -4,16 +4,14 @@ const ExchangeManager = (() => {
   const state = {
     usdKrw: 0,
     jpyKrw: 0,
-    upbit: {},      // symbol -> { price, change, volume }
-    bithumb: {},
-    binance: {},    // symbol -> { price, change, volume }
-    coinbase: {},   // symbol -> { price }
+    upbit: {},
+    binance: {},
+    coinbase: {},
     btcDominance: 0,
     coinbaseUsdPremium: 0,
-    usdtKrw: 0,
     listeners: [],
     ws: {},
-    status: { upbit: 'disconnected', binance: 'disconnected', bithumb: 'disconnected' },
+    status: { upbit: 'disconnected', binance: 'disconnected' },
   };
 
   function emit(event, data) {
@@ -33,7 +31,6 @@ const ExchangeManager = (() => {
         emit('rate', { usdKrw: state.usdKrw, jpyKrw: state.jpyKrw });
       }
     } catch(e) {
-      // fallback: try another source
       try {
         const r2 = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
         const d2 = await r2.json();
@@ -45,17 +42,21 @@ const ExchangeManager = (() => {
     setTimeout(fetchExchangeRate, 60000);
   }
 
-  // --- BTC Dominance & global data via CoinGecko ---
+  // --- BTC Dominance via CoinGecko ---
   async function fetchGlobal() {
     try {
       const r = await fetch('https://api.coingecko.com/api/v3/global');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (d.data) {
         state.btcDominance = d.data.market_cap_percentage.btc.toFixed(1);
+        localStorage.setItem('btcDominance', state.btcDominance);
         emit('global', { btcDominance: state.btcDominance });
+        setTimeout(fetchGlobal, 120000);
+        return;
       }
     } catch(e) {}
-    setTimeout(fetchGlobal, 120000);
+    setTimeout(fetchGlobal, 15000); // retry sooner on failure
   }
 
   // --- Upbit WebSocket ---
@@ -86,7 +87,7 @@ const ExchangeManager = (() => {
         price: d.trade_price,
         change: d.signed_change_rate,
         changePrice: d.signed_change_price,
-        volume: d.acc_trade_price_24h / 1e8, // 억원
+        volume: d.acc_trade_price_24h / 1e8,
         high: d.high_price,
         low: d.low_price,
       };
@@ -126,7 +127,7 @@ const ExchangeManager = (() => {
         state.binance[symbol] = {
           price: parseFloat(t.c),
           change: (parseFloat(t.c) - parseFloat(t.o)) / parseFloat(t.o),
-          volume: parseFloat(t.q) / 1e6, // million USDT
+          volume: parseFloat(t.q) / 1e6,
           high: parseFloat(t.h),
           low: parseFloat(t.l),
           open: parseFloat(t.o),
@@ -146,82 +147,22 @@ const ExchangeManager = (() => {
     state.ws.binance = ws;
   }
 
-  // --- Bithumb WebSocket ---
-  function connectBithumb(symbols) {
-    if (state.ws.bithumb) { state.ws.bithumb.close(); }
-    state.status.bithumb = 'connecting';
-    emit('status', state.status);
-
-    const ws = new WebSocket('wss://pubwss.bithumb.com/pub/ws');
-
-    ws.onopen = () => {
-      state.status.bithumb = 'connected';
-      emit('status', state.status);
-      const syms = symbols.map(s => `${s}_KRW`);
-      ws.send(JSON.stringify({ type: 'ticker', symbols: syms, tickTypes: ['MID'] }));
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.type !== 'ticker') return;
-        const c = d.content;
-        const symbol = c.symbol.replace('_KRW', '');
-        const prev = state.bithumb[symbol];
-        state.bithumb[symbol] = {
-          price: parseFloat(c.closePrice),
-          change: parseFloat(c.chgRate) / 100,
-          changePrice: parseFloat(c.chgAmt),
-          volume: parseFloat(c.volumePower),
-        };
-        emit('bithumb', { symbol, data: state.bithumb[symbol], prev });
-      } catch(e2) {}
-    };
-
-    ws.onclose = () => {
-      state.status.bithumb = 'disconnected';
-      emit('status', state.status);
-      setTimeout(() => connectBithumb(symbols), 3000);
-    };
-
-    ws.onerror = () => ws.close();
-    state.ws.bithumb = ws;
-  }
-
-  // --- Coinbase REST (polled, no public WS without auth) ---
-  async function fetchCoinbasePrice(symbol = 'BTC') {
+  // --- Coinbase REST — BTC only, for Coinbase premium indicator ---
+  async function fetchCoinbasePrice() {
     try {
-      const r = await fetch(`https://api.exchange.coinbase.com/products/${symbol}-USD/ticker`);
+      const r = await fetch('https://api.exchange.coinbase.com/products/BTC-USD/ticker');
       const d = await r.json();
       const price = parseFloat(d.price);
-      state.coinbase[symbol] = { price };
-      emit('coinbase', { symbol, price });
-
-      // Coinbase premium vs Binance
-      if (symbol === 'BTC' && state.binance.BTC) {
-        const binanceUsd = state.binance.BTC.price;
-        state.coinbaseUsdPremium = ((price - binanceUsd) / binanceUsd * 100).toFixed(3);
-        emit('coinbase-premium', state.coinbaseUsdPremium);
+      state.coinbase.BTC = { price };
+      if (state.binance.BTC) {
+        state.coinbaseUsdPremium = ((price - state.binance.BTC.price) / state.binance.BTC.price * 100).toFixed(3);
+        emit('coinbase-premium', parseFloat(state.coinbaseUsdPremium));
       }
     } catch(e) {}
-    setTimeout(() => fetchCoinbasePrice(symbol), 5000);
+    setTimeout(fetchCoinbasePrice, 5000);
   }
 
-  // --- Compute kimchi premium ---
-  function getKimchiPremium(symbol, criterion = 'upbit', target = 'binance') {
-    const krwPrice = criterion === 'upbit' ? state.upbit[symbol]?.price :
-                     criterion === 'bithumb' ? state.bithumb[symbol]?.price : null;
-    const usdPrice = target === 'binance' ? state.binance[symbol]?.price :
-                     target === 'coinbase' ? state.coinbase[symbol]?.price : null;
-
-    if (!krwPrice || !usdPrice || !state.usdKrw) return null;
-    const binanceKrw = usdPrice * state.usdKrw;
-    const gap = krwPrice - binanceKrw;
-    const pct = gap / binanceKrw * 100;
-    return { gap, pct, krwPrice, usdPrice, binanceKrw };
-  }
-
-  // --- Init available markets ---
+  // --- Init ---
   async function fetchUpbitMarkets() {
     try {
       const r = await fetch('https://api.upbit.com/v1/market/all?isDetails=false');
@@ -230,23 +171,91 @@ const ExchangeManager = (() => {
     } catch(e) { return []; }
   }
 
+  async function fetchBinanceMarkets() {
+    try {
+      const r = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+      const list = await r.json();
+      const data = {};
+      list.forEach(t => {
+        if (!t.symbol.endsWith('USDT')) return;
+        const sym = t.symbol.slice(0, -4);
+        data[sym] = {
+          price: parseFloat(t.lastPrice),
+          change: parseFloat(t.priceChangePercent) / 100,
+          volume: parseFloat(t.quoteVolume) / 1e6,
+          high: parseFloat(t.highPrice),
+          low: parseFloat(t.lowPrice),
+          open: parseFloat(t.openPrice),
+        };
+      });
+      return data;
+    } catch(e) { return {}; }
+  }
+
+  async function fetchUpbitTickers(symbols) {
+    const result = {};
+    for (let i = 0; i < symbols.length; i += 100) {
+      try {
+        const batch = symbols.slice(i, i + 100).map(s => `KRW-${s}`).join(',');
+        const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(batch)}`);
+        const list = await r.json();
+        list.forEach(t => {
+          const sym = t.market.replace('KRW-', '');
+          result[sym] = {
+            price: t.trade_price,
+            change: t.signed_change_rate,
+            volume: t.acc_trade_price_24h / 1e8,
+            high: t.high_price,
+            low: t.low_price,
+          };
+        });
+      } catch(e) {}
+    }
+    return result;
+  }
+
   async function init() {
     fetchExchangeRate();
     fetchGlobal();
 
-    const upbitSymbols = await fetchUpbitMarkets();
+    // Show cached BTC dominance immediately while fetchGlobal is in flight
+    const cachedDom = localStorage.getItem('btcDominance');
+    if (cachedDom) emit('global', { btcDominance: cachedDom });
+
+    // Fetch both exchange market lists + Binance prices in parallel
+    const [upbitSymbols, binanceData] = await Promise.all([
+      fetchUpbitMarkets(),
+      fetchBinanceMarkets(),
+    ]);
+
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
-      ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','MATIC','AVAX','LINK',
-       'ATOM','UNI','LTC','BCH','EOS','TRX','ETC','XLM','ALGO','NEAR'];
+      ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
+       'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
+
+    // Compute intersection and broadcast the full symbol list immediately
+    const binanceSet = new Set(Object.keys(binanceData));
+    const commonSymbols = defaultSymbols.filter(s => binanceSet.has(s));
+    emit('symbols', commonSymbols);
+
+    // Seed initial Binance prices from REST (before WebSocket connects)
+    const binanceUpdates = commonSymbols
+      .filter(s => binanceData[s])
+      .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
+    if (binanceUpdates.length) emit('binance-batch', binanceUpdates);
+
+    // Seed initial Upbit prices from REST (batched, 100 per request)
+    const upbitData = await fetchUpbitTickers(commonSymbols);
+    Object.entries(upbitData).forEach(([sym, d]) => {
+      state.upbit[sym] = d;
+      emit('upbit', { symbol: sym, data: d, prev: null });
+    });
 
     connectUpbit(defaultSymbols);
     connectBinance();
-    connectBithumb(defaultSymbols.slice(0, 30)); // Bithumb has fewer coins
-    fetchCoinbasePrice('BTC');
-    fetchCoinbasePrice('ETH');
+    fetchCoinbasePrice();
 
     return defaultSymbols;
   }
 
-  return { init, on, state, getKimchiPremium };
+  return { init, on, state };
 })();
