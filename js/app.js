@@ -33,7 +33,12 @@ createApp({
     let _firebaseReady = false;
     function getDb() {
       if (!_firebaseReady) {
-        firebase.initializeApp(FIREBASE_CONFIG);
+        try {
+          firebase.initializeApp(FIREBASE_CONFIG);
+        } catch(e) {
+          // "duplicate-app" means initializeApp was already called — safe to ignore
+          if (e.code !== 'app/duplicate-app') throw e;
+        }
         _firebaseReady = true;
       }
       return firebase.database();
@@ -131,7 +136,7 @@ createApp({
           await nextTick();
           if (chatScrollEl.value) chatScrollEl.value.scrollTop = chatScrollEl.value.scrollHeight;
         });
-      } catch(e) {}
+      } catch(e) { console.error('[Chat] init failed:', e); }
     }
 
     const _chatLimiter = createRateLimiter();
