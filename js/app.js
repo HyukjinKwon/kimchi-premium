@@ -14,7 +14,7 @@ createApp({
     const _desktop = window.innerWidth > 1024;
     const showCharts = ref(window.innerWidth > 768);
     const showAlarm = ref(false);
-    const showChat = ref(_desktop);
+    const showChat = ref(true);
     const showNews = ref(_desktop);
     const showLiq  = ref(_desktop);
 
