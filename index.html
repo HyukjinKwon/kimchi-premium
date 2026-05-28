@@ -347,11 +347,18 @@
     <div class="chat-sidebar-body">
       <div class="chat-messages" ref="chatScrollEl">
         <div v-if="chatMessages.length === 0" class="chat-empty">No messages yet</div>
-        <div v-for="m in chatMessages" :key="m.id" class="chat-msg" :class="m.fromTg ? 'msg-tg' : 'msg-web'">
-          <div class="chat-msg-header">
+        <div v-for="m in chatMessages" :key="m.id"
+             class="chat-msg"
+             :class="[m.from === chatName && m.emoji === chatEmoji ? 'msg-own' : (m.fromTg ? 'msg-tg' : 'msg-web')]">
+          <!-- others: show name/emoji/badge -->
+          <div class="chat-msg-header" v-if="!(m.from === chatName && m.emoji === chatEmoji)">
             <span class="chat-emoji">{{ m.emoji || '👤' }}</span>
             <span class="chat-from">{{ m.from }}</span>
             <span v-if="m.fromTg" class="chat-tg-badge">TG</span>
+            <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
+          </div>
+          <!-- own: just timestamp, right-aligned -->
+          <div class="chat-msg-header" v-else style="justify-content:flex-end;margin-bottom:2px">
             <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
           </div>
           <div class="chat-text">{{ m.text }}</div>

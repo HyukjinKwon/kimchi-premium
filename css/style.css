@@ -569,10 +569,18 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
   background: var(--header-bg);
   border-radius: 10px;
   padding: 7px 10px;
-  max-width: 100%;
+  max-width: 85%;
+  align-self: flex-start;
 }
-.msg-tg { border-left: 3px solid #2CA5E0; }
+.msg-tg  { border-left: 3px solid #2CA5E0; }
 .msg-web { border-left: 3px solid #f0b90b; }
+.msg-own {
+  align-self: flex-end;
+  background: #1a73e8;
+  border-radius: 10px;
+}
+.msg-own .chat-text { color: #fff; }
+.msg-own .chat-ts   { color: rgba(255,255,255,0.7); }
 .chat-msg-header {
   display: flex;
   align-items: center;
