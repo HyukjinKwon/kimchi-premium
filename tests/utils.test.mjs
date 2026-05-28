@@ -79,19 +79,13 @@ test('fmtLiqPrice 4dp for 1–99', () => assert.equal(fmtLiqPrice(5), '5.0000'))
 test('fmtLiqPrice 6dp for < 1', () => assert.equal(fmtLiqPrice(0.5), '0.500000'));
 
 // ── newsAge ───────────────────────────────────────────────────────────────────
-test('newsAge returns local HH:MM for same-day news', () => {
+test('newsAge returns local HH:MM for recent news', () => {
   const ts = Math.floor(Date.now() / 1000) - 30 * 60;
-  const result = newsAge(ts);
-  assert.match(result, /^\d{2}:\d{2}$/);
+  assert.match(newsAge(ts), /^\d{2}:\d{2}$/);
 });
-test('newsAge returns local HH:MM for a few hours ago', () => {
-  const ts = Math.floor(Date.now() / 1000) - 3 * 3600;
-  const result = newsAge(ts);
-  assert.match(result, /^\d{2}:\d{2}$/);
-});
-test('newsAge returns days for old news', () => {
+test('newsAge returns local HH:MM for old news', () => {
   const ts = Math.floor(Date.now() / 1000) - 2 * 86400;
-  assert.equal(newsAge(ts), '2d');
+  assert.match(newsAge(ts), /^\d{2}:\d{2}$/);
 });
 
 // ── coinIcon ──────────────────────────────────────────────────────────────────
