@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
-  fmtKrw, fmtUsd, fmtPct, fmtPremium,
+  fmtKrw, fmtUsd, fmtPct, fmtPremium, fmtKrwGap,
   pctClass, premiumClass, fmtVolume,
   fmtTradePrice, fmtTradeQty,
   fmtLiqUsd, fmtLiqPrice,
@@ -34,8 +34,14 @@ test('fmtPct formats zero with +', () => assert.equal(fmtPct(0), '+0.00%'));
 
 // ── fmtPremium ───────────────────────────────────────────────────────────────
 test('fmtPremium returns -- for null', () => assert.equal(fmtPremium(null), '--'));
-test('fmtPremium shows 1dp positive', () => assert.equal(fmtPremium(2.345), '+2.3%'));
-test('fmtPremium shows 1dp negative', () => assert.equal(fmtPremium(-1.234), '-1.2%'));
+test('fmtPremium shows 2dp positive', () => assert.equal(fmtPremium(2.345), '+2.35%'));
+test('fmtPremium shows 2dp negative', () => assert.equal(fmtPremium(-1.234), '-1.23%'));
+
+// ── fmtKrwGap ────────────────────────────────────────────────────────────────
+test('fmtKrwGap returns -- for 0', () => assert.equal(fmtKrwGap(0), '--'));
+test('fmtKrwGap formats large negative with 1dp', () => assert.equal(fmtKrwGap(-1967182.26), '-1,967,182.3'));
+test('fmtKrwGap formats positive with + sign', () => assert.equal(fmtKrwGap(1234.5), '+1,234.5'));
+test('fmtKrwGap formats small negative with 1dp', () => assert.equal(fmtKrwGap(-3.28), '-3.3'));
 
 // ── pctClass ─────────────────────────────────────────────────────────────────
 test('pctClass td-up for positive', () => assert.equal(pctClass(0.5), 'td-up'));

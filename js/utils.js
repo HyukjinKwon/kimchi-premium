@@ -24,7 +24,14 @@ function fmtPct(n) {
 
 function fmtPremium(n) {
   if (n == null || isNaN(n)) return '--';
-  return (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+
+function fmtKrwGap(n) {
+  if (n == null || isNaN(n) || n === 0) return '--';
+  const abs = Math.abs(n);
+  const s = abs.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return (n >= 0 ? '+' : '-') + s;
 }
 
 function pctClass(n) {
@@ -107,7 +114,7 @@ function createRateLimiter({ limit = 4, window: win = 15_000, block = 60_000 } =
 // Export for Node.js (tests); in browser these are already globals
 if (typeof module !== 'undefined') {
   module.exports = {
-    fmtKrw, fmtUsd, fmtPct, fmtPremium,
+    fmtKrw, fmtUsd, fmtPct, fmtPremium, fmtKrwGap,
     pctClass, premiumClass, fmtVolume,
     fmtTradePrice, fmtTradeQty,
     fmtLiqUsd, fmtLiqPrice,

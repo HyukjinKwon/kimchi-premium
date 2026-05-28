@@ -158,7 +158,7 @@
           {{ fmtPremium(btcRow.pct) }}
         </div>
         <div class="krw" :class="premiumClass(btcRow.gap)">
-          {{ btcRow.gap >= 0 ? '+' : '' }}{{ fmtKrw(btcRow.gap) }}₩
+          {{ fmtKrwGap(btcRow.gap) }}₩
         </div>
       </div>
 
@@ -254,7 +254,7 @@
               <td :class="pctClass(row.change)">{{ fmtPct(row.change * 100) }}</td>
               <td class="hide-mobile">{{ row.volume ? row.volume.toFixed(0) : '--' }}</td>
               <td class="premium-cell" :class="premiumClass(row.pct)">
-                <div>{{ row.gap ? (row.gap >= 0 ? '+' : '') + fmtKrw(row.gap) : '--' }}</div>
+                <div>{{ fmtKrwGap(row.gap) }}</div>
                 <div style="font-size:11px;opacity:0.85">{{ fmtPremium(row.pct) }}</div>
               </td>
             </tr>

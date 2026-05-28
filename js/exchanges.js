@@ -179,12 +179,19 @@ const ExchangeManager = (() => {
   }
 
   // --- Init ---
-  async function fetchUpbitMarkets() {
+  async function fetchUpbitMarkets(retry = 1) {
     try {
       const r = await fetch('https://api.upbit.com/v1/market/all?isDetails=false');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       return d.filter(m => m.market.startsWith('KRW-')).map(m => m.market.replace('KRW-', ''));
-    } catch(e) { return []; }
+    } catch(e) {
+      if (retry > 0) {
+        await new Promise(r => setTimeout(r, 600));
+        return fetchUpbitMarkets(retry - 1);
+      }
+      return [];
+    }
   }
 
   // Lightweight: prices only (148 KB vs 1.76 MB for 24hr). Used for fast initial table render.
@@ -311,9 +318,11 @@ const ExchangeManager = (() => {
     const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB
 
     const upbitSymbols = await upbitMarketsP;
+    const HARDCODED_FALLBACK = ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
+      'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
+    // If Upbit markets fetch failed, use cached symbols so the full list is preserved
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
-      ['BTC','ETH','XRP','ADA','SOL','DOGE','DOT','AVAX','LINK',
-       'ATOM','UNI','LTC','BCH','TRX','ETC','XLM','NEAR'];
+      (cachedSymbols || HARDCODED_FALLBACK);
 
     if (!cachedSymbols) emit('symbols', defaultSymbols); // first visit: expand table early
 

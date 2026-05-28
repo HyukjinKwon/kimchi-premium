@@ -767,7 +767,7 @@ createApp({
       rows, btcRow,
       setSort, sortIcon,
       toggleFav,
-      fmtKrw, fmtUsd, fmtPct, fmtPremium, pctClass, premiumClass, fmtVolume,
+      fmtKrw, fmtUsd, fmtPct, fmtPremium, fmtKrwGap, pctClass, premiumClass, fmtVolume,
       coinIcon, onImgError,
       addAlarm, removeAlarm,
       top20,

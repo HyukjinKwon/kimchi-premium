@@ -178,9 +178,8 @@ body {
   display: flex;
   align-items: center;
   gap: 24px;
-  flex-wrap: wrap;
 }
-.premium-exchanges { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
+.premium-exchanges { display: flex; align-items: center; gap: 24px; }
 .premium-card .ex-block { display: flex; align-items: center; gap: 10px; }
 .premium-card .ex-logo { height: 28px; }
 .premium-card .ex-name { font-size: 11px; color: var(--text-muted); }
@@ -352,7 +351,7 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
   .top-item { flex: 0 0 calc(50% - 8px); }
 
   /* Premium card */
-  .premium-card { gap: 12px; padding: 14px 12px; }
+  .premium-card { gap: 12px; padding: 14px 12px; flex-wrap: wrap; }
   .premium-card .ex-price { font-size: 16px; }
   .premium-result .pct { font-size: 22px; }
 
