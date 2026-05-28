@@ -239,22 +239,7 @@ createApp({
       recentTrades.value = [];
     }
 
-    function fmtTradePrice(n) {
-      if (!n) return '--';
-      if (n >= 10000) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      if (n >= 1000)  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      if (n >= 100)   return n.toFixed(3);
-      if (n >= 1)     return n.toFixed(4);
-      if (n >= 0.1)   return n.toFixed(5);
-      if (n >= 0.01)  return n.toFixed(6);
-      return n.toFixed(8);
-    }
-
-    function fmtTradeQty(n) {
-      if (n >= 100) return n.toFixed(1);
-      if (n >= 1) return n.toFixed(3);
-      return n.toFixed(5);
-    }
+    // fmtTradePrice, fmtTradeQty — defined in js/utils.js
 
     function mountCoinChart() {
       const container = document.getElementById('coin-chart-container');
@@ -384,43 +369,7 @@ createApp({
       localStorage.setItem('favCoins', JSON.stringify([...favCoins.value]));
     }
 
-    // --- Number formatting ---
-    function fmtKrw(n) {
-      if (!n) return '--';
-      return Math.round(n).toLocaleString();
-    }
-    function fmtUsd(n) {
-      if (!n) return '--';
-      if (n >= 1000) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      if (n >= 1)    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-      return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
-    }
-    function fmtPct(n) {
-      if (n == null || isNaN(n)) return '--';
-      return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
-    }
-    function fmtPremium(n) {
-      if (n == null || isNaN(n)) return '--';
-      return (n >= 0 ? '+' : '') + n.toFixed(3) + '%';
-    }
-    function pctClass(n) {
-      if (!n || n === 0) return 'td-neutral';
-      return n > 0 ? 'td-up' : 'td-down';
-    }
-    function premiumClass(n) {
-      if (!n || n === 0) return 'neutral';
-      return n > 0 ? 'pos' : 'neg';
-    }
-    function fmtVolume(n) {
-      if (!n) return '--';
-      if (n >= 1000) return (n / 1000).toFixed(1) + 'T';
-      if (n >= 1) return n.toFixed(0) + 'B';
-      return (n * 100).toFixed(0) + 'M';
-    }
-    function coinIcon(symbol) {
-      const sym = symbol.toLowerCase();
-      return `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/${sym}.png`;
-    }
+    // --- Number formatting --- defined in js/utils.js (globals)
     function onImgError(e) {
       e.target.src = 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/generic.png';
     }
@@ -611,21 +560,7 @@ createApp({
       _bybitWs = ws;
     }
 
-    function fmtLiqUsd(n) {
-      if (!n) return '$0';
-      if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-      if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
-      return '$' + n.toFixed(0);
-    }
-
-    function fmtLiqPrice(n) {
-      if (!n) return '--';
-      if (n >= 10000) return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
-      if (n >= 100)   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-      if (n >= 1)     return n.toFixed(4);
-      return n.toFixed(6);
-    }
+    // fmtLiqUsd, fmtLiqPrice — defined in js/utils.js
 
     // ── OKX liquidation helpers ───────────────────────────────────────────────
     async function fetchOKXInstruments() {
@@ -753,13 +688,7 @@ createApp({
       setTimeout(fetchNews, 60 * 1000);
     }
 
-    function newsAge(ts) {
-      const mins = Math.floor((Date.now() / 1000 - ts) / 60);
-      if (mins < 60) return mins + 'm';
-      const hrs = Math.floor(mins / 60);
-      if (hrs < 24) return hrs + 'h';
-      return Math.floor(hrs / 24) + 'd';
-    }
+    // newsAge — defined in js/utils.js
 
     onMounted(async () => {
       ExchangeManager.on(handleExchangeEvent);

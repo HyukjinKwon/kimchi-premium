@@ -1,0 +1,11 @@
+{
+  "name": "kimchi-premium",
+  "version": "1.0.0",
+  "description": "실시간 김치프리미엄 — Kimchi Premium live tracker",
+  "scripts": {
+    "test": "node --test tests/utils.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
