@@ -1,4 +1,4 @@
-const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
+const { createApp, ref, computed, reactive, onMounted, watch, watchEffect, nextTick } = Vue;
 
 createApp({
   setup() {
@@ -282,21 +282,20 @@ createApp({
       }
     });
 
-    // Auto-fill price input with the current Binance price.
-    // On symbol change: always reset to the new symbol's price.
-    // On initial load: fill once when the first price arrives (don't overwrite after that).
+    // On symbol change: always reset price to the new symbol's current price (or empty).
     watch(predSymbol, (sym) => {
       if (predPending.value) return;
       const p = prices[sym]?.binancePrice;
       predPrice.value = p ? String(p) : '';
     });
-    watch(
-      () => prices[predSymbol.value]?.binancePrice,
-      (price) => {
-        if (predPending.value || !price || predPrice.value) return;
-        predPrice.value = String(price);
-      }
-    );
+    // On initial load: fill once when the first price arrives for the default symbol.
+    // watchEffect re-establishes its dependency chain eagerly, so it reliably catches
+    // the first binancePrice write even when prices[sym] didn't exist on registration.
+    watchEffect(() => {
+      if (predPending.value || predPrice.value) return;
+      const p = prices[predSymbol.value]?.binancePrice;
+      if (p) predPrice.value = String(p);
+    });
 
     async function submitPrediction() {
       const sym = predSymbol.value;
