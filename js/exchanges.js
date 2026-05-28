@@ -208,11 +208,11 @@ const ExchangeManager = (() => {
     } catch(e) { return {}; }
   }
 
-  // Fetch Upbit tickers in parallel batches, emitting each batch as it arrives
+  // Fetch Upbit tickers in parallel batches of 20, emitting each batch as it arrives
   async function fetchAndStreamUpbitTickers(symbols) {
     const batches = [];
-    for (let i = 0; i < symbols.length; i += 100)
-      batches.push(symbols.slice(i, i + 100));
+    for (let i = 0; i < symbols.length; i += 20)
+      batches.push(symbols.slice(i, i + 20));
 
     await Promise.all(batches.map(async batch => {
       try {
@@ -235,6 +235,31 @@ const ExchangeManager = (() => {
     }));
   }
 
+  // Fetch Binance 24hr data for a small set of symbols using the multi-symbol endpoint
+  async function fetchBinancePriority(symbols) {
+    try {
+      const syms = encodeURIComponent(JSON.stringify(symbols.map(s => s + 'USDT')));
+      const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${syms}`);
+      const list = await r.json();
+      if (!Array.isArray(list)) return;
+      const updates = list.map(t => ({
+        symbol: t.symbol.slice(0, -4),
+        data: {
+          price:  parseFloat(t.lastPrice),
+          change: parseFloat(t.priceChangePercent) / 100,
+          volume: parseFloat(t.quoteVolume) / 1e6,
+          high:   parseFloat(t.highPrice),
+          low:    parseFloat(t.lowPrice),
+          open:   parseFloat(t.openPrice),
+        },
+        prev: null,
+      }));
+      emit('binance-batch', updates);
+    } catch(e) {}
+  }
+
+  const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','TON','SUI','LINK'];
+
   async function init() {
     fetchExchangeRate();
     fetchGlobal();
@@ -250,9 +275,17 @@ const ExchangeManager = (() => {
       }
     } catch(e) {}
 
+    // Show priority rows immediately while full market data loads
+    emit('symbols', PRIORITY_SYMS);
+
+    // Fire all fetches in parallel:
+    //   - priority Upbit + Binance data (small, fast)
+    //   - full market symbol lists (larger, slower)
     const [upbitSymbols, binanceData] = await Promise.all([
       fetchUpbitMarkets(),
       fetchBinanceMarkets(),
+      fetchAndStreamUpbitTickers(PRIORITY_SYMS),
+      fetchBinancePriority(PRIORITY_SYMS),
     ]);
 
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
@@ -263,13 +296,16 @@ const ExchangeManager = (() => {
     const commonSymbols = defaultSymbols.filter(s => binanceSet.has(s));
     emit('symbols', commonSymbols);
 
-    // Emit Binance data immediately, then stream Upbit batches in parallel
+    // Full Binance batch (updates/replaces priority data too)
     const binanceUpdates = commonSymbols
       .filter(s => binanceData[s])
       .map(s => ({ symbol: s, data: binanceData[s], prev: null }));
     if (binanceUpdates.length) emit('binance-batch', binanceUpdates);
 
-    await fetchAndStreamUpbitTickers(commonSymbols);
+    // Fetch remaining non-priority symbols' Upbit prices (fire and forget)
+    const prioritySet = new Set(PRIORITY_SYMS);
+    const remaining = commonSymbols.filter(s => !prioritySet.has(s));
+    if (remaining.length) fetchAndStreamUpbitTickers(remaining);
 
     connectUpbit(defaultSymbols);
     connectBinance();
