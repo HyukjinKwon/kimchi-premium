@@ -1,0 +1,103 @@
+# 실시간김프 — Kimchi Premium
+
+Real-time tracker for the **Kimchi Premium (김치프리미엄)** — the price gap between Korean crypto exchange Upbit (KRW) and global exchange Binance (USDT).
+
+🌐 **Live site:** [realtimekimp.com](https://realtimekimp.com)
+
+---
+
+## Features
+
+- **Real-time prices** via WebSocket — Upbit and Binance stream simultaneously
+- **Kimchi premium** (%) and KRW gap for BTC and all common coins
+- **Exchange rates** — USD/KRW, JPY/KRW, USDT/KRW refreshed every minute
+- **BTC dominance** from CoinGecko
+- **Coinbase USD premium** vs Binance (BTC only)
+- **Coin table** — sortable by price, change, volume, or premium; All / Favorites tabs; coin search
+- **Coin detail panel** — price chart, liquidation heatmap, recent trades, 24h alarm
+- **TradingView charts** — BTC Dominance and USDT/KRW
+- **Live chat** — anonymous, rate-limited, powered by Firebase Realtime Database
+- **News feed** and **liquidation feed**
+- **Night mode** with localStorage persistence
+- Fully **responsive** — desktop sidebar layout and mobile-optimized 5-column table
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| UI framework | Vue 3 (CDN, Composition API) |
+| Styling | Vanilla CSS, custom properties for theming |
+| Charts | TradingView Widget |
+| Price data | Upbit WebSocket + REST, Binance WebSocket + REST |
+| Exchange rate | open.er-api.com (exchangerate-api.com fallback) |
+| Market data | CoinGecko `/global` |
+| Chat / Presence | Firebase Realtime Database |
+| Hosting | Cloudflare Pages |
+
+No build step. No bundler. Open `index.html` in a browser and it works.
+
+---
+
+## Project Structure
+
+```
+kimchi-premium/
+├── index.html          # Single-page app entry point
+├── css/
+│   └── style.css       # All styles, responsive breakpoints at 768px / 1024px
+├── js/
+│   ├── exchanges.js    # WebSocket manager (Upbit, Binance, Coinbase, exchange rates)
+│   ├── app.js          # Vue app — state, table logic, chat, alarms, coin detail
+│   ├── charts.js       # TradingView widget mount/unmount helpers
+│   └── utils.js        # Pure formatting helpers (fmtKrw, fmtPct, fmtPremium, …)
+├── tests/
+│   └── utils.test.mjs  # Node built-in test runner, ~60 unit tests for utils.js
+├── firebase/           # Firebase security rules
+├── cloudflare/         # Cloudflare Pages config / redirects
+└── package.json        # Only used for running tests (no dependencies)
+```
+
+---
+
+## Running Locally
+
+Just open `index.html` in any modern browser — no server required for the core tracker.
+
+For the **live chat** to work you need a Firebase project:
+1. Create a Firebase project with Realtime Database enabled
+2. Fill in `FIREBASE_CONFIG` in `js/app.js` with your project credentials
+3. Deploy the security rules in `firebase/`
+
+---
+
+## Tests
+
+Unit tests cover all formatting utilities (`fmtKrw`, `fmtUsd`, `fmtPct`, `fmtPremium`, `fmtKrwGap`, `fmtVolume`, `fmtTradePrice`, `fmtLiqUsd`, `createRateLimiter`, etc.).
+
+```bash
+npm test
+```
+
+Requires Node 20+. No additional packages needed.
+
+---
+
+## Data Sources
+
+| Data | Source | Refresh |
+|---|---|---|
+| Upbit KRW prices | Upbit WebSocket `wss://api.upbit.com/websocket/v1` | Real-time |
+| Binance USD prices | Binance WebSocket `wss://stream.binance.com:9443/ws/!miniTicker@arr` | Real-time |
+| Coinbase BTC price | Coinbase REST API | Every 5 s |
+| USD/KRW, JPY/KRW | open.er-api.com | Every 60 s |
+| BTC dominance | CoinGecko `/api/v3/global` | Every 2 min |
+
+All data is fetched client-side. No backend server.
+
+---
+
+## License
+
+MIT
