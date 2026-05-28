@@ -181,10 +181,10 @@ body {
   gap: 24px;
 }
 .premium-exchanges { display: flex; align-items: center; gap: 24px; }
-.premium-card .ex-block { display: flex; align-items: center; gap: 10px; }
-.premium-card .ex-logo { height: 28px; }
+.premium-card .ex-block { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+.premium-card .ex-logo { height: 28px; flex-shrink: 0; }
 .premium-card .ex-name { font-size: 11px; color: var(--text-muted); }
-.premium-card .ex-price { font-size: 20px; font-weight: 700; color: var(--text); }
+.premium-card .ex-price { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; min-width: 9ch; }
 .premium-card .ex-sub { font-size: 11px; color: var(--text-muted); }
 .premium-sign { font-size: 28px; color: var(--text-muted); padding: 0 8px; }
 .premium-result { text-align: center; }
@@ -277,7 +277,15 @@ body {
 table.coin-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
+table.coin-table th:nth-child(1) { width: 13%; }
+table.coin-table th:nth-child(2) { width: 16%; }
+table.coin-table th:nth-child(3) { width: 13%; }
+table.coin-table th:nth-child(4) { width: 12%; }
+table.coin-table th:nth-child(5) { width: 12%; }
+table.coin-table th:nth-child(6) { width: 10%; }
+table.coin-table th:nth-child(7) { width: 24%; }
 table.coin-table thead tr {
   background: var(--header-bg);
 }
@@ -303,6 +311,7 @@ table.coin-table td {
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   vertical-align: middle;
+  overflow: hidden;
 }
 table.coin-table td:first-child { text-align: left; }
 table.coin-table tr:last-child td { border-bottom: none; }
@@ -359,8 +368,13 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
   /* Coin table — 5 visible columns on mobile, keep it tight */
   .nav-links { display: none; }
   table.coin-table th, table.coin-table td { padding: 4px 3px; font-size: 10px; }
-  table.coin-table th:first-child { width: 70px !important; }
+  table.coin-table th:nth-child(1) { width: 20% !important; }
+  table.coin-table th:nth-child(2) { width: 24% !important; }
+  table.coin-table th:nth-child(3) { width: 18% !important; }
+  table.coin-table th:nth-child(5) { width: 15% !important; }
+  table.coin-table th:nth-child(7) { width: 23% !important; }
   .coin-icon { width: 16px; height: 16px; }
+  .premium-card .ex-block { min-width: 0; }
   .coin-symbol { font-size: 11px; }
   .coin-cell { gap: 3px; }
   .fav-btn { font-size: 11px; }
