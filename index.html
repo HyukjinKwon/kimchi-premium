@@ -399,7 +399,7 @@
       </div>
       <div class="liq-feed">
         <div v-if="recentLiqs.length === 0" class="liq-empty">
-          {{ liqStatus === 'connecting' ? 'Connecting...' : 'Waiting for liquidations...' }}
+          <div class="loading-spinner"></div>
         </div>
         <div v-for="l in recentLiqs" :key="l.id"
              class="liq-item" :class="[l.side === 'LONG' ? 'liq-long' : 'liq-short', l.usd >= 1e6 ? 'liq-big' : '']">

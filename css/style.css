@@ -742,7 +742,7 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
   min-height: 0;
   overflow-y: auto;
 }
-.liq-empty { font-size: 11px; color: var(--text-muted); padding: 12px; text-align: center; }
+.liq-empty { font-size: 11px; color: var(--text-muted); padding: 12px; display: flex; justify-content: center; }
 .liq-item {
   display: flex;
   align-items: center;
