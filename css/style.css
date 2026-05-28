@@ -55,6 +55,7 @@ body {
   color: #f0b90b;
   text-decoration: none;
   letter-spacing: -0.5px;
+  white-space: nowrap;
   display: flex;
   align-items: baseline;
   gap: 8px;
