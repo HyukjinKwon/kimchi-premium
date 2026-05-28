@@ -366,7 +366,7 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
   /* Premium card — must never force body wider than viewport */
   .premium-card { gap: 12px; padding: 14px 12px; flex-wrap: wrap; overflow: hidden; }
   .premium-exchanges { width: 100%; overflow: hidden; }
-  .premium-card .ex-block { flex: 1 1 0; min-width: 0; overflow: hidden; }
+  .premium-card .ex-block { flex: 1 1 0; min-width: 0; overflow: hidden; padding-right: 4px; }
   .premium-card .ex-price { font-size: 14px; min-width: 0; white-space: nowrap; }
   .premium-card .ex-name { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .premium-result .pct { font-size: 22px; }
