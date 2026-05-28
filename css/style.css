@@ -344,6 +344,8 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.show-mobile { display: none; }
+
 /* COIN SEARCH FILTER */
 .coin-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
 
@@ -384,6 +386,7 @@ table.coin-table tbody tr:hover { background: var(--row-hover); }
   .coin-cell { gap: 3px; }
   .fav-btn { font-size: 11px; }
   .hide-mobile { display: none; }
+  .show-mobile { display: inline; }
 
   /* Search input */
   .search-input { width: 110px; }

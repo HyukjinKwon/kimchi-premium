@@ -39,7 +39,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/btc.png">
 <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/btc.svg">
 <title>김치프리미엄(김프) 실시간 — Kimchi Premium | 업비트 vs 바이낸스 | 실시간김프</title>
-<link rel="stylesheet" href="css/style.css?v=11">
+<link rel="stylesheet" href="css/style.css?v=12">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6449234458197635"
         crossorigin="anonymous"></script>
 <script type="application/ld+json">
@@ -215,7 +215,7 @@
               <span class="sort-icon" :class="{sorted: sortKey==='binanceKrw'}">{{ sortIcon('binanceKrw') }}</span>
             </th>
             <th @click="setSort('change')">
-              Chg%
+              <span class="hide-mobile">Change(%)</span><span class="show-mobile">Chg%</span>
               <span class="sort-icon" :class="{sorted: sortKey==='change'}">{{ sortIcon('change') }}</span>
             </th>
             <th @click="setSort('volume')" class="hide-mobile">
@@ -223,7 +223,7 @@
               <span class="sort-icon" :class="{sorted: sortKey==='volume'}">{{ sortIcon('volume') }}</span>
             </th>
             <th @click="setSort('pct')">
-              Prem(₩)
+              <span class="hide-mobile">Premium(₩)</span><span class="show-mobile">Prem(₩)</span>
               <span class="sort-icon" :class="{sorted: sortKey==='pct'}">{{ sortIcon('pct') }}</span>
             </th>
           </tr>
