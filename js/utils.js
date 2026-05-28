@@ -2,7 +2,12 @@
 
 function fmtKrw(n) {
   if (!n) return '--';
-  return Math.round(n).toLocaleString('en-US');
+  if (n >= 1000) return Math.round(n).toLocaleString('en-US');
+  if (n >= 100)  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (n >= 10)   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n >= 1)    return n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  if (n >= 0.1)  return n.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  return n.toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 });
 }
 
 function fmtUsd(n) {

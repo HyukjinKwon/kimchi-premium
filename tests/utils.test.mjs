@@ -15,7 +15,9 @@ const {
 test('fmtKrw returns -- for 0', () => assert.equal(fmtKrw(0), '--'));
 test('fmtKrw returns -- for null', () => assert.equal(fmtKrw(null), '--'));
 test('fmtKrw rounds and formats', () => assert.equal(fmtKrw(1234567.8), '1,234,568'));
-test('fmtKrw formats small number', () => assert.equal(fmtKrw(100), '100'));
+test('fmtKrw 1dp for 100-999', () => assert.equal(fmtKrw(100), '100.0'));
+test('fmtKrw 2dp for 10-99', () => assert.equal(fmtKrw(10.8), '10.80'));
+test('fmtKrw 3dp for 1-9', () => assert.equal(fmtKrw(1.5), '1.500'));
 
 // ── fmtUsd ───────────────────────────────────────────────────────────────────
 test('fmtUsd returns -- for 0', () => assert.equal(fmtUsd(0), '--'));
