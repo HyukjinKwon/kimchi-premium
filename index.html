@@ -361,9 +361,11 @@
             <span v-if="m.fromTg" class="chat-tg-badge">TG</span>
             <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
           </div>
-          <!-- own: just timestamp, right-aligned -->
+          <!-- own: nickname + timestamp, right-aligned -->
           <div class="chat-msg-header" v-else style="justify-content:flex-end;margin-bottom:2px">
             <span class="chat-ts">{{ new Date(m.ts).toLocaleTimeString('ko', {hour:'2-digit', minute:'2-digit'}) }}</span>
+            <span class="chat-from" style="color:rgba(255,255,255,0.85)">{{ m.from }}</span>
+            <span class="chat-emoji">{{ m.emoji || '👤' }}</span>
           </div>
           <div class="chat-text">{{ m.text }}</div>
         </div>

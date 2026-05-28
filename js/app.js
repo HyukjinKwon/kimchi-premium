@@ -453,19 +453,19 @@ createApp({
       }
     }
 
-    // CoinMarketCap top-10 by market cap (excluding stablecoins).
+    // CoinMarketCap top-N by market cap (excluding stablecoins and BNB/TRX which are not on Upbit KRW).
     // CMC overall ranks (including stablecoins) are preserved for accurate badge display.
     const CMC_TOP10 = [
       { sym: 'BTC',  rank: 1 },
       { sym: 'ETH',  rank: 2 },
       { sym: 'XRP',  rank: 4 },
-      { sym: 'BNB',  rank: 5 },
       { sym: 'SOL',  rank: 6 },
       { sym: 'DOGE', rank: 8 },
       { sym: 'ADA',  rank: 9 },
-      { sym: 'TRX',  rank: 10 },
       { sym: 'AVAX', rank: 11 },
       { sym: 'TON',  rank: 12 },
+      { sym: 'SUI',  rank: 13 },
+      { sym: 'LINK', rank: 15 },
     ];
 
     function initFavorites() {
