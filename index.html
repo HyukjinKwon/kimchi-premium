@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
-  script-src 'self' 'unsafe-eval'
+  script-src 'self' 'unsafe-inline' 'unsafe-eval'
+    https://www.googletagmanager.com
     https://www.gstatic.com
     https://cdn.jsdelivr.net
     https://s3.tradingview.com https://*.tradingview.com
@@ -18,6 +19,7 @@
     https://api.coingecko.com https://api.binance.com https://api.upbit.com
     https://api.exchange.coinbase.com https://open.er-api.com https://api.exchangerate-api.com
     https://www.okx.com https://min-api.cryptocompare.com https://api.rss2json.com
+    https://www.googletagmanager.com
     https://cdn.jsdelivr.net;
   img-src 'self' data: https:;
   frame-src https://*.tradingview.com;
@@ -61,6 +63,30 @@
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
   "author": { "@type": "Person", "email": "gurwls2223@gmail.com" }
 }
+</script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18194044468"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'AW-18194044468');
+</script>
+<!-- Event snippet for 페이지 조회 (1) conversion -->
+<script>
+  gtag('event', 'conversion', {
+    'send_to': 'AW-18194044468/KuOdCMzmybQcELSszOND',
+    'value': 1.0,
+    'currency': 'KRW'
+  });
+</script>
+<!-- Event snippet for 페이지 조회 conversion -->
+<script>
+  gtag('event', 'conversion', {
+    'send_to': 'AW-18194044468/klKfCKSe2rQcELSszOND',
+    'value': 1.0,
+    'currency': 'KRW'
+  });
 </script>
 </head>
 <body>
