@@ -654,7 +654,7 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
   display: flex;
   flex-direction: column;
   gap: 6px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 .chat-empty { color: var(--text-muted); font-size: 12px; text-align: center; margin-top: 20px; }
 .chat-msg {
