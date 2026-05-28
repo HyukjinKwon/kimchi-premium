@@ -413,11 +413,17 @@
 </div><!-- /app -->
 
 <!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<!-- Vue 3 -->
-<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
-<!-- TradingView -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"
+        integrity="sha384-AQ3POAMqIhwS81FrUH95ekxqBZHeP5tG2JfEL3+7GuTtfRLWnrRh32UxwzM+//A9"
+        crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"
+        integrity="sha384-1/m+A1jVWbD3yiK3/vtFvm1+LjK1WLpSoDY+Kaxppwn/yP9BVSgdHTNQVOjrzUO5"
+        crossorigin="anonymous"></script>
+<!-- Vue 3 (pinned to 3.5.13 for SRI stability) -->
+<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"
+        integrity="sha384-W/1Fp/LgAYO/oTn9Gs+PbeWuMuq1eQCnUMPCeg8POmMYchhzxctjEqtbiCIxDOON"
+        crossorigin="anonymous"></script>
+<!-- TradingView — SRI omitted: tv.js has no version pin and auto-updates -->
 <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 <script src="js/exchanges.js"></script>
 <script src="js/app.js"></script>
