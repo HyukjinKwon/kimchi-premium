@@ -290,7 +290,7 @@ const ExchangeManager = (() => {
     if (!symbols.length) return;
     try {
       const r = await fetch(
-        `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${symbols.join(',')}&tsyms=KRW`
+        `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${symbols.join(',')}&tsyms=KRW&e=Upbit`
       );
       if (!r.ok) return;
       const { RAW } = await r.json();
