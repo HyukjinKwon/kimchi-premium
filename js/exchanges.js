@@ -297,7 +297,7 @@ const ExchangeManager = (() => {
       ws.send(`~m~${json.length}~m~${json}`);
     }
 
-    const ws = new WebSocket('wss://data.tradingview.com/socket.io/websocket');
+    const ws = new WebSocket('wss://widgetdata.tradingview.com/socket.io/websocket');
     const pending = new Set(symbols);
 
     ws.onopen = () => {
