@@ -284,59 +284,12 @@ const ExchangeManager = (() => {
 
   const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','TON','SUI','LINK'];
 
-  // Fetch live Upbit prices via TradingView's relay WebSocket.
-  // TradingView's servers have persistent connections to exchanges and send the cached
-  // last tick immediately, arriving much faster than a direct Upbit connection.
-  // Prices are only applied if Upbit hasn't already provided data for that symbol.
-  function fetchTradingViewQuotes(symbols) {
-    if (!symbols.length) return;
-    const session = 'qs_' + Math.random().toString(36).slice(2, 12);
-
-    function send(ws, method, params) {
-      const json = JSON.stringify({ m: method, p: params });
-      ws.send(`~m~${json.length}~m~${json}`);
-    }
-
-    const ws = new WebSocket('wss://widgetdata.tradingview.com/socket.io/websocket');
-    const pending = new Set(symbols);
-
-    ws.onopen = () => {
-      send(ws, 'set_auth_token', ['unauthorized_user_token']);
-      send(ws, 'quote_create_session', [session]);
-      send(ws, 'quote_set_fields', [session, 'lp', 'ch', 'chp', 'volume']);
-      send(ws, 'quote_fast_symbols', [session, ...symbols.map(s => `UPBIT:${s}KRW`)]);
-    };
-
-    ws.onmessage = (e) => {
-      for (const { symbol, price, change } of parseTvFrames(e.data)) {
-        if (!pending.has(symbol)) continue;
-        // Only use TradingView price if Upbit hasn't arrived yet for this symbol
-        if (!state.upbit[symbol]) {
-          const d = { price, change, volume: 0 };
-          state.upbit[symbol] = d;
-          emit('upbit', { symbol, data: d, prev: null });
-        }
-        pending.delete(symbol);
-        if (pending.size === 0) ws.close();
-      }
-    };
-
-    ws.onerror = () => ws.close();
-    // Give larger batches more time; close regardless once Upbit REST has landed
-    const timeout = Math.max(8000, symbols.length * 30);
-    setTimeout(() => { try { ws.close(); } catch(e) {} }, timeout);
-  }
-
   async function init() {
     fetchExchangeRate();
     fetchGlobal();
 
     // Show priority coins immediately while we fetch the full market list
     emit('symbols', PRIORITY_SYMS);
-
-    // Kick off TradingView relay connection early — delivers Upbit prices for priority
-    // coins within ~200ms, well before the Upbit REST chain completes.
-    fetchTradingViewQuotes(PRIORITY_SYMS);
 
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
@@ -347,10 +300,6 @@ const ExchangeManager = (() => {
     const upbitSymbols = await upbitMarketsP;
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
     emit('symbols', defaultSymbols);
-
-    // Fetch TradingView quotes for all remaining coins (PRIORITY_SYMS already in flight)
-    const remainingSyms = defaultSymbols.filter(s => !PRIORITY_SYMS.includes(s));
-    if (remainingSyms.length) fetchTradingViewQuotes(remainingSyms);
 
     // Fire Binance prices as soon as they arrive — don't wait for Upbit.
     // Table shows immediately with Binance columns; Upbit cells filled from TradingView until REST completes.
