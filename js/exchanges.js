@@ -320,7 +320,11 @@ const ExchangeManager = (() => {
         if (!krw?.PRICE || state.upbit[symbol]?.high > 0) continue;
         const d = {
           price:  krw.PRICE,
-          change: (krw.CHANGEPCT24HOUR ?? 0) / 100,
+          // Upbit's signed_change_rate is change since KST midnight (UTC+9).
+          // CC's CHANGEPCTDAY is change since UTC midnight (= KST 09:00).
+          // CC's CHANGEPCT24HOUR is a rolling 24h window — furthest from Upbit.
+          // CHANGEPCTDAY is the closest available approximation without extra API calls.
+          change: (krw.CHANGEPCTDAY ?? krw.CHANGEPCT24HOUR ?? 0) / 100,
           // CC volume (VOLUME24HOURTO / 1e8) shown as placeholder until real Upbit data arrives.
           // Upbit REST/WS sets high > 0 which blocks CC updates, replacing this with accurate data.
           volume: (krw.VOLUME24HOURTO ?? 0) / 1e8,

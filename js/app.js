@@ -470,9 +470,7 @@ createApp({
       const gen = ++tradeGeneration;
 
       if (exchange === 'upbit') {
-        // CC 1-min bars while the WebSocket handshake completes — same lazy pattern
-        // as Binance (no separate REST pre-fetch; WS snapshot replaces bars on connect).
-        // Refreshes every 60 s while real Upbit data (qty > 0) hasn't arrived.
+        // CC 1-min bars: shown while no real Upbit data has arrived; refreshes every 30 s.
         function _fetchCCBars() {
           fetch(`https://min-api.cryptocompare.com/data/v2/histominute?fsym=${symbol}&tsym=KRW&limit=30&e=Upbit`)
             .then(r => r.json())
@@ -491,14 +489,23 @@ createApp({
           _fetchCCBars();
         }, 30000);
 
-        // Upbit REST recent trades — fills the panel before the WS connects.
-        fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
-          .then(r => r.json())
-          .then(list => {
-            if (tradeGeneration !== gen || !Array.isArray(list)) return;
-            recentTrades.value = parseUpbitRestTrades(list);
-          })
-          .catch(() => {});
+        // REST: initial load + refresh every 5 s until the WebSocket delivers its first
+        // real-time trade. Stops when WS works; keeps panel fresh when WS is blocked.
+        let _wsHasDelivered = false;
+        function _fetchRestTrades() {
+          fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
+            .then(r => r.json())
+            .then(list => {
+              if (tradeGeneration !== gen || !Array.isArray(list)) return;
+              recentTrades.value = parseUpbitRestTrades(list);
+            })
+            .catch(() => {});
+        }
+        _fetchRestTrades();
+        const _restTimer = setInterval(() => {
+          if (tradeGeneration !== gen || _wsHasDelivered) { clearInterval(_restTimer); return; }
+          _fetchRestTrades();
+        }, 5000);
 
         const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
         tradeWs = ws;
@@ -512,9 +519,10 @@ createApp({
           try {
             if (tradeGeneration !== gen) return;
             const buf = await e.data.arrayBuffer();
-            if (tradeGeneration !== gen) return; // re-check: switch may have happened during await
+            if (tradeGeneration !== gen) return;
             const trade = parseUpbitWsTrade(JSON.parse(new TextDecoder().decode(buf)));
             if (!trade) return;
+            _wsHasDelivered = true; // WS is live — stop the REST refresh loop
             _tradeBuf.push(trade);
             if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
           } catch(e) {}
