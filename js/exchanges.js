@@ -310,9 +310,16 @@ const ExchangeManager = (() => {
         const krw = currencies.KRW;
         // After market list is known, skip coins not confirmed on Upbit.
         if (_upbitValidSyms && !_upbitValidSyms.has(symbol)) continue;
-        // Skip if real Upbit data has arrived — volume > 0 is only set by REST/WS.
-        if (!krw?.PRICE || state.upbit[symbol]?.volume > 0) continue;
-        const d = { price: krw.PRICE, change: (krw.CHANGEPCT24HOUR ?? 0) / 100, volume: 0 };
+        // Skip if real Upbit data has arrived — Upbit REST/WS always sets high/low;
+        // CC never does, so high > 0 cleanly distinguishes real data from CC placeholders.
+        if (!krw?.PRICE || state.upbit[symbol]?.high > 0) continue;
+        const d = {
+          price:  krw.PRICE,
+          change: (krw.CHANGEPCT24HOUR ?? 0) / 100,
+          // VOLUME24HOURTO is 24h volume in KRW — same unit as Upbit's acc_trade_price_24h.
+          // Divide by 1e8 to match the units used throughout the app (100M KRW = 1 unit).
+          volume: (krw.VOLUME24HOURTO ?? 0) / 1e8,
+        };
         state.upbit[symbol] = d;
         // fromCC flag prevents this from adding unknown coins to allSymbols in app.js.
         emit('upbit', { symbol, data: d, prev: null, fromCC: true });
