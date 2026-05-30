@@ -293,11 +293,10 @@ describe('parseCryptoCompareBars', () => {
 describe('CryptoCompare fill guard semantics', () => {
   // These tests document the expected behaviour of the high>0 guard used in
   // fetchCryptoComparePrices. Upbit REST/WS always sets high/low (day range);
-  // CC never does — making high a clean discriminator even though CC now also
-  // supplies volume (so volume>0 can no longer serve as the guard).
+  // CC never does — making high a clean discriminator between real data and placeholders.
 
   test('no high field means CC placeholder (real Upbit data not yet arrived)', () => {
-    const ccData = { price: 100_000_000, change: 0.01, volume: 5000 };
+    const ccData = { price: 100_000_000, change: 0.01, volume: 0 };
     assert.equal(ccData.high, undefined);
     assert.equal(ccData.high > 0, false); // guard allows CryptoCompare to update
   });
@@ -308,7 +307,7 @@ describe('CryptoCompare fill guard semantics', () => {
   });
 
   test('fromCC flag distinguishes placeholder events from real Upbit events', () => {
-    const ccEvent   = { symbol: 'BTC', data: { price: 100, change: 0, volume: 5000 }, prev: null, fromCC: true };
+    const ccEvent   = { symbol: 'BTC', data: { price: 100, change: 0, volume: 0 }, prev: null, fromCC: true };
     const upbitEvent = { symbol: 'BTC', data: { price: 101, change: 0.01, volume: 5000, high: 102, low: 98 }, prev: null };
     assert.equal(ccEvent.fromCC, true);
     assert.equal(upbitEvent.fromCC, undefined); // real Upbit events never carry fromCC

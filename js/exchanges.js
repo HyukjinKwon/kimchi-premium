@@ -316,9 +316,10 @@ const ExchangeManager = (() => {
         const d = {
           price:  krw.PRICE,
           change: (krw.CHANGEPCT24HOUR ?? 0) / 100,
-          // VOLUME24HOURTO is 24h volume in KRW — same unit as Upbit's acc_trade_price_24h.
-          // Divide by 1e8 to match the units used throughout the app (100M KRW = 1 unit).
-          volume: (krw.VOLUME24HOURTO ?? 0) / 1e8,
+          // Volume omitted: CryptoCompare uses a rolling 24h window while Upbit resets
+          // at KST midnight, so the figures diverge significantly early in the Korean day.
+          // Show '--' for those few seconds rather than a misleading number.
+          volume: 0,
         };
         state.upbit[symbol] = d;
         // fromCC flag prevents this from adding unknown coins to allSymbols in app.js.

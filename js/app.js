@@ -491,14 +491,21 @@ createApp({
           _fetchCCBars();
         }, 60000);
 
+        // Upbit REST recent trades — fills the panel before the WS connects.
+        fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
+          .then(r => r.json())
+          .then(list => {
+            if (tradeGeneration !== gen || !Array.isArray(list)) return;
+            recentTrades.value = parseUpbitRestTrades(list);
+          })
+          .catch(() => {});
+
         const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
         tradeWs = ws;
         ws.onopen = () => {
-          // isOnlyRealtime omitted (defaults false) so Upbit sends a recent-trade
-          // snapshot on connect — same as how Binance WS delivers data immediately.
           ws.send(JSON.stringify([
             { ticket: 'kimchi-trade' },
-            { type: 'trade', codes: [`KRW-${symbol}`] },
+            { type: 'trade', codes: [`KRW-${symbol}`], isOnlyRealtime: true },
           ]));
         };
         ws.onmessage = async (e) => {
