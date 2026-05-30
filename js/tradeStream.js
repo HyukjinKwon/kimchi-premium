@@ -56,6 +56,26 @@ function parseTvFrames(raw) {
   return results;
 }
 
+// Parses a CryptoCompare histominute response into trade-panel entries.
+// Used as a placeholder in the Upbit Trades panel before live Upbit data arrives.
+// Each entry is one 1-minute candle; isBuy reflects whether price rose that minute.
+// qty is 0 (shown as '--') because minute aggregate volume isn't a meaningful trade size.
+function parseCryptoCompareBars(data) {
+  const bars = data?.Data?.Data;
+  if (!Array.isArray(bars)) return [];
+  return bars
+    .filter(b => b.close > 0)
+    .slice(-30)   // keep last 30 minutes (array is oldest-first)
+    .reverse()    // newest first to match trade panel ordering
+    .map(b => ({
+      id: b.time,
+      price: b.close,
+      qty: 0,
+      isBuy: b.close >= b.open,
+      time: new Date(b.time * 1000),
+    }));
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { parseUpbitRestTrades, parseUpbitWsTrade, parseBinanceTrade, parseTvFrames };
+  module.exports = { parseUpbitRestTrades, parseUpbitWsTrade, parseBinanceTrade, parseTvFrames, parseCryptoCompareBars };
 }

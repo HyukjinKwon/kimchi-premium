@@ -284,27 +284,38 @@ const ExchangeManager = (() => {
 
   const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','TON','SUI','LINK'];
 
+  // Authoritative Upbit symbol set — populated after fetchUpbitMarkets() succeeds.
+  // CryptoCompare polls use this to avoid emitting for coins not on Upbit.
+  let _upbitValidSyms = null;
+  // Expands from PRIORITY_SYMS to all Upbit coins once the market list arrives.
+  let _ccAllSymbols = null;
+
   // Pre-fill Upbit prices from CryptoCompare (CORS-open, free) so the hero card and
   // top rows show something immediately. Real Upbit data replaces these within seconds.
   async function fetchCryptoComparePrices(symbols) {
     if (!symbols.length) return;
+    // Once the market list is known, only request coins confirmed on Upbit.
+    const toFetch = _upbitValidSyms
+      ? symbols.filter(s => _upbitValidSyms.has(s))
+      : symbols;
+    if (!toFetch.length) return;
     try {
       const r = await fetch(
-        `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${symbols.join(',')}&tsyms=KRW&e=Upbit`
+        `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${toFetch.join(',')}&tsyms=KRW&e=Upbit`
       );
       if (!r.ok) return;
       const { RAW } = await r.json();
       if (!RAW) return;
       for (const [symbol, currencies] of Object.entries(RAW)) {
         const krw = currencies.KRW;
-        if (!krw?.PRICE || state.upbit[symbol]) continue;
-        const d = {
-          price: krw.PRICE,
-          change: (krw.CHANGEPCT24HOUR ?? 0) / 100,
-          volume: 0,
-        };
+        // After market list is known, skip coins not confirmed on Upbit.
+        if (_upbitValidSyms && !_upbitValidSyms.has(symbol)) continue;
+        // Skip if real Upbit data has arrived — volume > 0 is only set by REST/WS.
+        if (!krw?.PRICE || state.upbit[symbol]?.volume > 0) continue;
+        const d = { price: krw.PRICE, change: (krw.CHANGEPCT24HOUR ?? 0) / 100, volume: 0 };
         state.upbit[symbol] = d;
-        emit('upbit', { symbol, data: d, prev: null });
+        // fromCC flag prevents this from adding unknown coins to allSymbols in app.js.
+        emit('upbit', { symbol, data: d, prev: null, fromCC: true });
       }
     } catch(e) {}
   }
@@ -319,6 +330,12 @@ const ExchangeManager = (() => {
     // Fill hero card prices from CryptoCompare before Upbit REST/WS connects
     fetchCryptoComparePrices(PRIORITY_SYMS);
 
+    // Poll 2 more times over the first ~7 s so prices stay fresh until Upbit WS takes over.
+    // Each poll skips any symbol where real Upbit data (volume > 0) has already arrived.
+    [3000, 7000].forEach(delay =>
+      setTimeout(() => fetchCryptoComparePrices(_ccAllSymbols || PRIORITY_SYMS), delay)
+    );
+
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
     // Start both fetches in parallel
@@ -327,6 +344,9 @@ const ExchangeManager = (() => {
 
     const upbitSymbols = await upbitMarketsP;
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
+    // Lock in the authoritative Upbit symbol list and expand polling target.
+    _upbitValidSyms = new Set(defaultSymbols);
+    _ccAllSymbols = defaultSymbols;
     emit('symbols', defaultSymbols);
 
     // Fill remaining coins from CryptoCompare while Upbit REST is in flight

@@ -472,6 +472,17 @@ createApp({
       if (exchange === 'upbit') {
         // Pre-populate with recent trades from REST so the panel isn't empty
         // while the WebSocket handshake completes.
+        // CryptoCompare 1-min bars as immediate placeholder — only fills if still empty.
+        fetch(`https://min-api.cryptocompare.com/data/v2/histominute?fsym=${symbol}&tsym=KRW&limit=30&e=Upbit`)
+          .then(r => r.json())
+          .then(data => {
+            if (tradeGeneration !== gen || recentTrades.value.length > 0) return;
+            const bars = parseCryptoCompareBars(data);
+            if (bars.length) recentTrades.value = bars;
+          })
+          .catch(() => {});
+
+        // Upbit REST recent trades — always overwrites the CC placeholder when it arrives.
         fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
           .then(r => r.json())
           .then(list => {
@@ -704,7 +715,7 @@ createApp({
       } else if (event === 'symbols') {
         allSymbols.value = data.slice();
       } else if (event === 'upbit') {
-        const { symbol, data: d, prev } = data;
+        const { symbol, data: d, prev, fromCC } = data;
         if (!prices[symbol]) prices[symbol] = {};
         const upDown = prev && d.price !== prev.price ? (d.price > prev.price ? 'up' : 'down') : null;
         Object.assign(prices[symbol], {
@@ -713,7 +724,9 @@ createApp({
           upbitVolume: d.volume,
           upDown,
         });
-        if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
+        // CryptoCompare placeholder — never add to symbol list, only update existing entries.
+        // Only real Upbit REST/WS events and the 'symbols' event manage allSymbols.
+        if (!fromCC && !allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
         updateUsdtKrw();
         checkAlarms();
       } else if (event === 'binance-batch') {
