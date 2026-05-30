@@ -489,7 +489,7 @@ createApp({
           if (tradeGeneration !== gen) { clearInterval(_ccBarTimer); return; }
           if (recentTrades.value[0]?.qty > 0) { clearInterval(_ccBarTimer); return; }
           _fetchCCBars();
-        }, 60000);
+        }, 30000);
 
         // Upbit REST recent trades — fills the panel before the WS connects.
         fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
@@ -723,8 +723,11 @@ createApp({
         Object.assign(status, data);
       } else if (event === 'symbols') {
         allSymbols.value = data.slice();
+      } else if (event === 'symbols-remove') {
+        const toRemove = new Set(data);
+        allSymbols.value = allSymbols.value.filter(s => !toRemove.has(s));
       } else if (event === 'upbit') {
-        const { symbol, data: d, prev, fromCC } = data;
+        const { symbol, data: d, prev } = data;
         if (!prices[symbol]) prices[symbol] = {};
         const upDown = prev && d.price !== prev.price ? (d.price > prev.price ? 'up' : 'down') : null;
         Object.assign(prices[symbol], {
@@ -733,9 +736,9 @@ createApp({
           upbitVolume: d.volume,
           upDown,
         });
-        // CryptoCompare placeholder — never add to symbol list, only update existing entries.
-        // Only real Upbit REST/WS events and the 'symbols' event manage allSymbols.
-        if (!fromCC && !allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
+        // CC events (fromCC=true) may also expand allSymbols: CC e=Upbit only returns
+        // coins on Upbit, so any symbol it emits is safe to add to the table.
+        if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
         updateUsdtKrw();
         checkAlarms();
       } else if (event === 'binance-batch') {

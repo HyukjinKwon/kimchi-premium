@@ -282,7 +282,7 @@ const ExchangeManager = (() => {
     } catch(e) {}
   }
 
-  const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','TON','SUI','LINK'];
+  const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','SHIB','SUI','LINK'];
 
   // Authoritative Upbit symbol set — populated after fetchUpbitMarkets() succeeds.
   // CryptoCompare polls use this to avoid emitting for coins not on Upbit.
@@ -306,6 +306,11 @@ const ExchangeManager = (() => {
       if (!r.ok) return;
       const { RAW } = await r.json();
       if (!RAW) return;
+      // Emit removal for any fetched symbols not returned by CC — confirms they're not on Upbit.
+      const returnedSyms = new Set(Object.keys(RAW));
+      const notOnUpbit = toFetch.filter(s => !returnedSyms.has(s));
+      if (notOnUpbit.length) emit('symbols-remove', notOnUpbit);
+
       for (const [symbol, currencies] of Object.entries(RAW)) {
         const krw = currencies.KRW;
         // After market list is known, skip coins not confirmed on Upbit.
@@ -316,13 +321,12 @@ const ExchangeManager = (() => {
         const d = {
           price:  krw.PRICE,
           change: (krw.CHANGEPCT24HOUR ?? 0) / 100,
-          // Volume omitted: CryptoCompare uses a rolling 24h window while Upbit resets
-          // at KST midnight, so the figures diverge significantly early in the Korean day.
-          // Show '--' for those few seconds rather than a misleading number.
-          volume: 0,
+          // CC volume (VOLUME24HOURTO / 1e8) shown as placeholder until real Upbit data arrives.
+          // Upbit REST/WS sets high > 0 which blocks CC updates, replacing this with accurate data.
+          volume: (krw.VOLUME24HOURTO ?? 0) / 1e8,
         };
         state.upbit[symbol] = d;
-        // fromCC flag prevents this from adding unknown coins to allSymbols in app.js.
+        // fromCC flag lets app.js distinguish placeholder events from real Upbit events.
         emit('upbit', { symbol, data: d, prev: null, fromCC: true });
       }
     } catch(e) {}
@@ -348,21 +352,41 @@ const ExchangeManager = (() => {
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
     // Fire both in parallel.
-    const upbitMarketsP = fetchUpbitMarkets();   // ~200-500ms, may be CORS-blocked
+    // Market list races against a 1.5 s timeout — fetchUpbitMarkets() retries 4× on
+    // CORS failure (3.2 s total), which would freeze the table at 10 coins far too long.
+    const upbitMarketsP = Promise.race([
+      fetchUpbitMarkets(),
+      new Promise(resolve => setTimeout(() => resolve([]), 1500)),
+    ]);
     const binancePricesP = fetchBinancePrices(); // ~100ms, always works
 
     // Pre-load Binance prices without expanding the symbol list yet.
-    // When the Upbit market list arrives and we emit symbols, Binance prices are
-    // already stored so every row renders without spinners in the Binance column.
+    // When symbols are emitted below, Binance prices are already stored so no spinners.
     binancePricesP.then(prices => emit('binance-prices', prices));
 
-    // Wait for the Upbit market list — this defines which coins are valid.
+    // Wait for whichever arrives first (Upbit market list or 1.5 s timeout).
     const upbitSymbols = await upbitMarketsP;
     const binancePrices = await binancePricesP; // already resolved by now
     const binancePriceSet = new Set(Object.keys(binancePrices));
-    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
-    _upbitValidSyms = new Set(defaultSymbols);
-    _ccAllSymbols = defaultSymbols;
+
+    let defaultSymbols;
+    if (upbitSymbols.length > 0) {
+      // Market list arrived: use it as the authoritative Upbit symbol set.
+      defaultSymbols = upbitSymbols;
+      _upbitValidSyms = new Set(defaultSymbols);
+      _ccAllSymbols   = defaultSymbols;
+    } else {
+      // Market list unavailable (CORS-blocked or timed out).
+      // Keep _upbitValidSyms=null so CC fetches use e=Upbit for self-filtering.
+      // Expand _ccAllSymbols to all Binance coins so CC polls cover the full universe.
+      defaultSymbols = PRIORITY_SYMS;
+      _ccAllSymbols  = [...binancePriceSet];
+      // Trigger CC for all non-priority Binance symbols — CC e=Upbit returns only
+      // Upbit-listed coins, and fromCC events expand allSymbols in app.js.
+      const nonPriority = [...binancePriceSet].filter(s => !PRIORITY_SYMS.includes(s));
+      if (nonPriority.length) fetchCryptoComparePrices(nonPriority);
+    }
+
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);
 

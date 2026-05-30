@@ -296,7 +296,7 @@ describe('CryptoCompare fill guard semantics', () => {
   // CC never does — making high a clean discriminator between real data and placeholders.
 
   test('no high field means CC placeholder (real Upbit data not yet arrived)', () => {
-    const ccData = { price: 100_000_000, change: 0.01, volume: 0 };
+    const ccData = { price: 100_000_000, change: 0.01, volume: 1234 }; // CC supplies volume
     assert.equal(ccData.high, undefined);
     assert.equal(ccData.high > 0, false); // guard allows CryptoCompare to update
   });
