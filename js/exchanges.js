@@ -284,12 +284,40 @@ const ExchangeManager = (() => {
 
   const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','TON','SUI','LINK'];
 
+  // Pre-fill Upbit prices from CryptoCompare (CORS-open, free) so the hero card and
+  // top rows show something immediately. Real Upbit data replaces these within seconds.
+  async function fetchCryptoComparePrices(symbols) {
+    if (!symbols.length) return;
+    try {
+      const r = await fetch(
+        `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${symbols.join(',')}&tsyms=KRW`
+      );
+      if (!r.ok) return;
+      const { RAW } = await r.json();
+      if (!RAW) return;
+      for (const [symbol, currencies] of Object.entries(RAW)) {
+        const krw = currencies.KRW;
+        if (!krw?.PRICE || state.upbit[symbol]) continue;
+        const d = {
+          price: krw.PRICE,
+          change: (krw.CHANGEPCT24HOUR ?? 0) / 100,
+          volume: 0,
+        };
+        state.upbit[symbol] = d;
+        emit('upbit', { symbol, data: d, prev: null });
+      }
+    } catch(e) {}
+  }
+
   async function init() {
     fetchExchangeRate();
     fetchGlobal();
 
     // Show priority coins immediately while we fetch the full market list
     emit('symbols', PRIORITY_SYMS);
+
+    // Fill hero card prices from CryptoCompare before Upbit REST/WS connects
+    fetchCryptoComparePrices(PRIORITY_SYMS);
 
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
@@ -301,8 +329,12 @@ const ExchangeManager = (() => {
     const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
     emit('symbols', defaultSymbols);
 
+    // Fill remaining coins from CryptoCompare while Upbit REST is in flight
+    const remainingSyms = defaultSymbols.filter(s => !PRIORITY_SYMS.includes(s));
+    if (remainingSyms.length) fetchCryptoComparePrices(remainingSyms);
+
     // Fire Binance prices as soon as they arrive — don't wait for Upbit.
-    // Table shows immediately with Binance columns; Upbit cells filled from TradingView until REST completes.
+    // Upbit cells show CryptoCompare prices until the REST batch completes.
     const upbitP = fetchAllUpbitTickers(defaultSymbols);
     const binancePrices = await binancePricesP;
     const binancePriceSet = new Set(Object.keys(binancePrices));
