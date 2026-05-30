@@ -473,14 +473,26 @@ createApp({
         // Pre-populate with recent trades from REST so the panel isn't empty
         // while the WebSocket handshake completes.
         // CryptoCompare 1-min bars as immediate placeholder — only fills if still empty.
-        fetch(`https://min-api.cryptocompare.com/data/v2/histominute?fsym=${symbol}&tsym=KRW&limit=30&e=Upbit`)
-          .then(r => r.json())
-          .then(data => {
-            if (tradeGeneration !== gen || recentTrades.value.length > 0) return;
-            const bars = parseCryptoCompareBars(data);
-            if (bars.length) recentTrades.value = bars;
-          })
-          .catch(() => {});
+        // Also refreshes every 60 s while real Upbit data hasn't arrived yet (qty=0
+        // marks CC bars; real trades from REST/WS always have qty > 0).
+        function _fetchCCBars() {
+          fetch(`https://min-api.cryptocompare.com/data/v2/histominute?fsym=${symbol}&tsym=KRW&limit=30&e=Upbit`)
+            .then(r => r.json())
+            .then(data => {
+              if (tradeGeneration !== gen) return;
+              if (recentTrades.value.length > 0 && recentTrades.value[0].qty > 0) return;
+              const bars = parseCryptoCompareBars(data);
+              if (bars.length) recentTrades.value = bars;
+            })
+            .catch(() => {});
+        }
+        _fetchCCBars();
+        // Refresh CC bars every 60 s until real Upbit data lands or the panel closes.
+        const _ccBarTimer = setInterval(() => {
+          if (tradeGeneration !== gen) { clearInterval(_ccBarTimer); return; }
+          if (recentTrades.value[0]?.qty > 0) { clearInterval(_ccBarTimer); return; }
+          _fetchCCBars();
+        }, 60000);
 
         // Upbit REST recent trades — always overwrites the CC placeholder when it arrives.
         fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)

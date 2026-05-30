@@ -330,28 +330,29 @@ const ExchangeManager = (() => {
     // Fill hero card prices from CryptoCompare before Upbit REST/WS connects
     fetchCryptoComparePrices(PRIORITY_SYMS);
 
-    // Poll 2 more times over the first ~7 s so prices stay fresh until Upbit WS takes over.
-    // Each poll skips any symbol where real Upbit data (volume > 0) has already arrived.
-    [3000, 7000].forEach(delay =>
+    // Poll 3 more times in the first ~6 s so prices stay fresh until Upbit WS takes over.
+    // Polls are front-loaded: 1 s, 3 s, 6 s. Each poll skips symbols where real Upbit
+    // data (volume > 0) has already arrived.
+    [1000, 3000, 6000].forEach(delay =>
       setTimeout(() => fetchCryptoComparePrices(_ccAllSymbols || PRIORITY_SYMS), delay)
     );
 
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
-    // Fire both in parallel — process whichever arrives first.
+    // Fire both in parallel.
     const upbitMarketsP = fetchUpbitMarkets();   // ~200-500ms, may be CORS-blocked
     const binancePricesP = fetchBinancePrices(); // ~100ms, always works
 
-    // Binance prices arrive first (~100ms): expand the table from 10 → all Binance
-    // coins immediately. Non-Upbit coins are pruned once the Upbit market list lands.
-    const binancePrices = await binancePricesP;
-    const binancePriceSet = new Set(Object.keys(binancePrices));
-    emit('symbols', [...binancePriceSet]);
-    emit('binance-prices', binancePrices);
+    // Pre-load Binance prices without expanding the symbol list yet.
+    // When the Upbit market list arrives and we emit symbols, Binance prices are
+    // already stored so every row renders without spinners in the Binance column.
+    binancePricesP.then(prices => emit('binance-prices', prices));
 
-    // Now wait for the Upbit market list and apply the definitive filter.
+    // Wait for the Upbit market list — this defines which coins are valid.
     const upbitSymbols = await upbitMarketsP;
-    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : [...binancePriceSet];
+    const binancePrices = await binancePricesP; // already resolved by now
+    const binancePriceSet = new Set(Object.keys(binancePrices));
+    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
     _upbitValidSyms = new Set(defaultSymbols);
     _ccAllSymbols = defaultSymbols;
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
