@@ -58,7 +58,6 @@ const ExchangeManager = (() => {
       const d = await r.json();
       if (d.data) {
         state.btcDominance = d.data.market_cap_percentage.btc.toFixed(1);
-        localStorage.setItem('btcDominance', state.btcDominance);
         emit('global', { btcDominance: state.btcDominance });
         setTimeout(fetchGlobal, 120000);
         return;
@@ -285,27 +284,59 @@ const ExchangeManager = (() => {
 
   const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','TON','SUI','LINK'];
 
+  // Fetch live Upbit prices via TradingView's relay WebSocket.
+  // TradingView's servers have persistent connections to exchanges and send the cached
+  // last tick immediately, arriving much faster than a direct Upbit connection.
+  // Prices are only applied if Upbit hasn't already provided data for that symbol.
+  function fetchTradingViewQuotes(symbols) {
+    if (!symbols.length) return;
+    const session = 'qs_' + Math.random().toString(36).slice(2, 12);
+
+    function send(ws, method, params) {
+      const json = JSON.stringify({ m: method, p: params });
+      ws.send(`~m~${json.length}~m~${json}`);
+    }
+
+    const ws = new WebSocket('wss://data.tradingview.com/socket.io/websocket');
+    const pending = new Set(symbols);
+
+    ws.onopen = () => {
+      send(ws, 'set_auth_token', ['unauthorized_user_token']);
+      send(ws, 'quote_create_session', [session]);
+      send(ws, 'quote_set_fields', [session, 'lp', 'ch', 'chp', 'volume']);
+      send(ws, 'quote_fast_symbols', [session, ...symbols.map(s => `UPBIT:${s}KRW`)]);
+    };
+
+    ws.onmessage = (e) => {
+      for (const { symbol, price, change } of parseTvFrames(e.data)) {
+        if (!pending.has(symbol)) continue;
+        // Only use TradingView price if Upbit hasn't arrived yet for this symbol
+        if (!state.upbit[symbol]) {
+          const d = { price, change, volume: 0 };
+          state.upbit[symbol] = d;
+          emit('upbit', { symbol, data: d, prev: null });
+        }
+        pending.delete(symbol);
+        if (pending.size === 0) ws.close();
+      }
+    };
+
+    ws.onerror = () => ws.close();
+    // Give larger batches more time; close regardless once Upbit REST has landed
+    const timeout = Math.max(8000, symbols.length * 30);
+    setTimeout(() => { try { ws.close(); } catch(e) {} }, timeout);
+  }
+
   async function init() {
     fetchExchangeRate();
     fetchGlobal();
 
-    try {
-      const cachedDom = localStorage.getItem('btcDominance');
-      if (cachedDom) {
-        const n = parseFloat(cachedDom);
-        if (Number.isFinite(n) && n >= 0 && n <= 100) emit('global', { btcDominance: n.toFixed(1) });
-      }
-    } catch(e) {}
+    // Show priority coins immediately while we fetch the full market list
+    emit('symbols', PRIORITY_SYMS);
 
-    // Return visits: show full cached symbol list instantly (t=0)
-    // First visit: show priority coins while we fetch
-    let cachedSymbols = null;
-    try {
-      const s = JSON.parse(localStorage.getItem('commonSymbols') || 'null');
-      // Only trust the cache if it's a meaningful full list (not a fallback)
-      if (Array.isArray(s) && s.length > 50) cachedSymbols = s;
-    } catch(e) {}
-    emit('symbols', cachedSymbols || PRIORITY_SYMS);
+    // Kick off TradingView relay connection early — delivers Upbit prices for priority
+    // coins within ~200ms, well before the Upbit REST chain completes.
+    fetchTradingViewQuotes(PRIORITY_SYMS);
 
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
@@ -314,27 +345,21 @@ const ExchangeManager = (() => {
     const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB
 
     const upbitSymbols = await upbitMarketsP;
-    // Use cached symbols as fallback if Upbit markets fetch failed.
-    // cachedSymbols is only set when it has >50 coins, so this is always a full list.
-    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols :
-      (cachedSymbols || PRIORITY_SYMS);
+    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
+    emit('symbols', defaultSymbols);
 
-    if (!cachedSymbols) emit('symbols', defaultSymbols);
+    // Fetch TradingView quotes for all remaining coins (PRIORITY_SYMS already in flight)
+    const remainingSyms = defaultSymbols.filter(s => !PRIORITY_SYMS.includes(s));
+    if (remainingSyms.length) fetchTradingViewQuotes(remainingSyms);
 
     // Fire Binance prices as soon as they arrive — don't wait for Upbit.
-    // Table shows immediately with Binance columns; Upbit cells show spinners until REST completes.
+    // Table shows immediately with Binance columns; Upbit cells filled from TradingView until REST completes.
     const upbitP = fetchAllUpbitTickers(defaultSymbols);
     const binancePrices = await binancePricesP;
     const binancePriceSet = new Set(Object.keys(binancePrices));
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);
     emit('binance-prices', binancePrices);
-
-    // Cache for next visit so the full table renders at t=0.
-    // Only cache if we have a full list — never overwrite a good cache with a small fallback.
-    if (commonSymbols.length > 50) {
-      try { localStorage.setItem('commonSymbols', JSON.stringify(commonSymbols)); } catch(e) {}
-    }
 
     await upbitP;
 

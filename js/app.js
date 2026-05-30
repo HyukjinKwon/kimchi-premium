@@ -433,7 +433,7 @@ createApp({
     const selectedCoin = ref(null);
     const chartExchange = ref('upbit');
     const chartMarket = ref('KRW');
-    const chartInterval = ref('60');
+    const chartInterval = ref('15');
     const chartIntervals = [
       { value: '1', label: '1m' }, { value: '3', label: '3m' },
       { value: '5', label: '5m' }, { value: '15', label: '15m' },
@@ -470,6 +470,16 @@ createApp({
       const gen = ++tradeGeneration;
 
       if (exchange === 'upbit') {
+        // Pre-populate with recent trades from REST so the panel isn't empty
+        // while the WebSocket handshake completes.
+        fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
+          .then(r => r.json())
+          .then(list => {
+            if (tradeGeneration !== gen || !Array.isArray(list)) return;
+            recentTrades.value = parseUpbitRestTrades(list);
+          })
+          .catch(() => {});
+
         const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
         tradeWs = ws;
         ws.onopen = () => {
@@ -481,10 +491,11 @@ createApp({
         ws.onmessage = async (e) => {
           try {
             if (tradeGeneration !== gen) return;
-            const text = new TextDecoder().decode(await e.data.arrayBuffer());
-            const d = JSON.parse(text);
-            if (d.type !== 'trade') return;
-            _tradeBuf.push({ id: d.sequential_id || Date.now(), price: d.trade_price, qty: d.trade_volume, isBuy: d.ask_bid === 'BID', time: new Date(d.trade_timestamp) });
+            const buf = await e.data.arrayBuffer();
+            if (tradeGeneration !== gen) return; // re-check: switch may have happened during await
+            const trade = parseUpbitWsTrade(JSON.parse(new TextDecoder().decode(buf)));
+            if (!trade) return;
+            _tradeBuf.push(trade);
             if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
           } catch(e) {}
         };
@@ -497,8 +508,7 @@ createApp({
         ws.onmessage = (e) => {
           try {
             if (tradeGeneration !== gen) return;
-            const d = JSON.parse(e.data);
-            _tradeBuf.push({ id: d.t, price: parseFloat(d.p), qty: parseFloat(d.q), isBuy: !d.m, time: new Date(d.T) });
+            _tradeBuf.push(parseBinanceTrade(JSON.parse(e.data)));
             if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
           } catch(e) {}
         };
