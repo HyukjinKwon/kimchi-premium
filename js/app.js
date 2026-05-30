@@ -470,11 +470,9 @@ createApp({
       const gen = ++tradeGeneration;
 
       if (exchange === 'upbit') {
-        // Pre-populate with recent trades from REST so the panel isn't empty
-        // while the WebSocket handshake completes.
-        // CryptoCompare 1-min bars as immediate placeholder — only fills if still empty.
-        // Also refreshes every 60 s while real Upbit data hasn't arrived yet (qty=0
-        // marks CC bars; real trades from REST/WS always have qty > 0).
+        // CC 1-min bars while the WebSocket handshake completes — same lazy pattern
+        // as Binance (no separate REST pre-fetch; WS snapshot replaces bars on connect).
+        // Refreshes every 60 s while real Upbit data (qty > 0) hasn't arrived.
         function _fetchCCBars() {
           fetch(`https://min-api.cryptocompare.com/data/v2/histominute?fsym=${symbol}&tsym=KRW&limit=30&e=Upbit`)
             .then(r => r.json())
@@ -487,28 +485,20 @@ createApp({
             .catch(() => {});
         }
         _fetchCCBars();
-        // Refresh CC bars every 60 s until real Upbit data lands or the panel closes.
         const _ccBarTimer = setInterval(() => {
           if (tradeGeneration !== gen) { clearInterval(_ccBarTimer); return; }
           if (recentTrades.value[0]?.qty > 0) { clearInterval(_ccBarTimer); return; }
           _fetchCCBars();
         }, 60000);
 
-        // Upbit REST recent trades — always overwrites the CC placeholder when it arrives.
-        fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
-          .then(r => r.json())
-          .then(list => {
-            if (tradeGeneration !== gen || !Array.isArray(list)) return;
-            recentTrades.value = parseUpbitRestTrades(list);
-          })
-          .catch(() => {});
-
         const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
         tradeWs = ws;
         ws.onopen = () => {
+          // isOnlyRealtime omitted (defaults false) so Upbit sends a recent-trade
+          // snapshot on connect — same as how Binance WS delivers data immediately.
           ws.send(JSON.stringify([
             { ticket: 'kimchi-trade' },
-            { type: 'trade', codes: [`KRW-${symbol}`], isOnlyRealtime: true },
+            { type: 'trade', codes: [`KRW-${symbol}`] },
           ]));
         };
         ws.onmessage = async (e) => {
