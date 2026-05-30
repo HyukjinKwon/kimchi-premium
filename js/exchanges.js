@@ -338,30 +338,30 @@ const ExchangeManager = (() => {
 
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
-    // Start both fetches in parallel
-    const upbitMarketsP = fetchUpbitMarkets();   // ~30ms,  56KB
-    const binancePricesP = fetchBinancePrices(); // ~100ms, 148KB
+    // Fire both in parallel — process whichever arrives first.
+    const upbitMarketsP = fetchUpbitMarkets();   // ~200-500ms, may be CORS-blocked
+    const binancePricesP = fetchBinancePrices(); // ~100ms, always works
 
-    const upbitSymbols = await upbitMarketsP;
-    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
-    // Lock in the authoritative Upbit symbol list and expand polling target.
-    _upbitValidSyms = new Set(defaultSymbols);
-    _ccAllSymbols = defaultSymbols;
-    emit('symbols', defaultSymbols);
-
-    // Fill remaining coins from CryptoCompare while Upbit REST is in flight
-    const remainingSyms = defaultSymbols.filter(s => !PRIORITY_SYMS.includes(s));
-    if (remainingSyms.length) fetchCryptoComparePrices(remainingSyms);
-
-    // Fire Binance prices as soon as they arrive — don't wait for Upbit.
-    // Upbit cells show CryptoCompare prices until the REST batch completes.
-    const upbitP = fetchAllUpbitTickers(defaultSymbols);
+    // Binance prices arrive first (~100ms): expand the table from 10 → all Binance
+    // coins immediately. Non-Upbit coins are pruned once the Upbit market list lands.
     const binancePrices = await binancePricesP;
     const binancePriceSet = new Set(Object.keys(binancePrices));
-    const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
-    emit('symbols', commonSymbols);
+    emit('symbols', [...binancePriceSet]);
     emit('binance-prices', binancePrices);
 
+    // Now wait for the Upbit market list and apply the definitive filter.
+    const upbitSymbols = await upbitMarketsP;
+    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : [...binancePriceSet];
+    _upbitValidSyms = new Set(defaultSymbols);
+    _ccAllSymbols = defaultSymbols;
+    const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
+    emit('symbols', commonSymbols);
+
+    // Fill non-priority coins from CryptoCompare while Upbit REST is in flight.
+    const remainingSyms = commonSymbols.filter(s => !PRIORITY_SYMS.includes(s));
+    if (remainingSyms.length) fetchCryptoComparePrices(remainingSyms);
+
+    const upbitP = fetchAllUpbitTickers(defaultSymbols);
     await upbitP;
 
     // Load heavy 24hr stats in background — updates change %, volume, high, low
