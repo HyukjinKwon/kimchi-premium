@@ -383,8 +383,7 @@
       </svg>
       Live Chat
       <span class="chat-online-count" v-if="onlineCount > 0 || visitorCount > 0">
-        <span class="chat-online-dot"></span>{{ onlineCount }} live
-        <span v-if="visitorCount > onlineCount" style="opacity:0.6"> / {{ visitorCount }} 24h</span>
+        <span class="chat-online-dot"></span>{{ onlineCount }}<span v-if="visitorCount > onlineCount" style="opacity:0.6"> ({{ visitorCount }})</span> {{ onlineCount === 1 ? 'user' : 'users' }}
       </span>
       <div class="chat-nick-wrap" style="margin-left:auto">
         <span v-if="!chatEditingNick" class="chat-nick-badge" @click="chatEditingNick=true" title="닉네임 변경">{{ chatEmoji }} {{ chatDisplayName }} ✎</span>
