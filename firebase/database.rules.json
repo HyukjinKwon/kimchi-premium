@@ -42,13 +42,22 @@
     "predictions": {
       ".read": true,
       "$userId": {
-        ".write": "(!data.exists() && newData.exists() && newData.child('targetTs').val() > now && newData.child('targetTs').val() <= now + 3660000 && newData.child('bet').val() > 0 && (!root.child('scores').child($userId).child('points').exists() || newData.child('bet').val() <= root.child('scores').child($userId).child('points').val())) || (data.exists() && !newData.exists())",
+        ".write": "(!data.exists() && newData.exists() && newData.child('targetTs').val() > now && newData.child('targetTs').val() <= now + 660000 && newData.child('bet').val() > 0 && (!root.child('scores').child($userId).child('points').exists() || newData.child('bet').val() <= root.child('scores').child($userId).child('points').val())) || (data.exists() && !newData.exists())",
         ".validate": "!newData.exists() || newData.hasChildren(['symbol', 'targetPrice', 'targetTs', 'bet'])",
         "symbol":      { ".validate": "newData.isString() && (newData.val() == 'BTC' || newData.val() == 'ETH' || newData.val() == 'XRP' || newData.val() == 'SOL')" },
         "targetPrice": { ".validate": "newData.isNumber() && newData.val() > 0" },
         "targetTs":    { ".validate": "newData.isNumber()" },
         "bet":         { ".validate": "newData.isNumber() && newData.val() > 0" },
         "$other":      { ".validate": false }
+      }
+    },
+    "visitors": {
+      ".read": true,
+      "$userId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['ts'])",
+        "ts": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
       }
     },
     "settings": {

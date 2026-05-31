@@ -105,6 +105,7 @@ createApp({
     }
 
     const onlineCount = ref(0);
+    const visitorCount = ref(0);
 
     // Tab-scoped session ID for chat presence; persistent user ID for betting/scores
     const _sessionId = sessionStorage.getItem('chatSession') || Math.random().toString(36).slice(2);
@@ -124,10 +125,17 @@ createApp({
           const presenceRef = db.ref(`presence/${sessionId}`);
           presenceRef.onDisconnect().remove(); // auto-remove when tab closes
           presenceRef.set({ name: chatName.value, emoji: chatEmoji.value, ts: Date.now() });
+          // Record visit timestamp for 24h visitor window (keyed by persistent userId)
+          db.ref(`visitors/${_userId}`).set({ ts: Date.now() });
         });
 
         db.ref('presence').on('value', (snap) => {
           onlineCount.value = snap.numChildren();
+        });
+
+        // ── 24-hour visitor count ──────────────────────────────────────────
+        db.ref('visitors').orderByChild('ts').startAt(Date.now() - 24 * 60 * 60 * 1000).on('value', (snap) => {
+          visitorCount.value = snap.numChildren();
         });
 
         // ── Messages ───────────────────────────────────────────────────────
@@ -313,7 +321,7 @@ createApp({
 
       predSubmitting.value = true;
       predScore.tries++;
-      const targetTs = Date.now() + 60 * 60 * 1000;
+      const targetTs = Date.now() + 10 * 60 * 1000;
       const pending = { symbol: sym, targetPrice: target, targetTs, bet };
 
       try {
@@ -326,7 +334,7 @@ createApp({
         predBet.value = '';
         await db.ref(`scores/${_userId}`).update({ correct: predScore.correct, tries: predScore.tries, points: predScore.points, ts: Date.now() });
         const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
-        await postSystemMessage(`${chatEmoji.value} ${chatDisplayName.value} — ${sym} 1시간 후 $${fmt(target)} 예측 | 배팅 ${bet}p`);
+        await postSystemMessage(`${chatEmoji.value} ${chatDisplayName.value} — ${sym} 10분 후 $${fmt(target)} 예측 | 배팅 ${bet}p`);
       } catch(e) {
         predScore.tries--;
         predError.value = predPending.value
@@ -1033,7 +1041,7 @@ createApp({
     return {
       usdKrw, jpyKrw, btcDominance, coinbaseUsdPremium, usdtKrwPrice,
       nightMode, searchStr, showFilter, showCharts, showAlarm, showChat, showNews, showLiq,
-      chatName, chatEmoji, chatDisplayName, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount,
+      chatName, chatEmoji, chatDisplayName, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount, visitorCount,
       sendChatMessage, saveNickname, deleteMessage, resetAllPoints,
       predSymbol, predSymbols, predPrice, predBet, predSubmitting, predError, predPending, predCountdown, predScore, predRank, submitPrediction,
       status, favCoins, showFavOnly, alarms,
