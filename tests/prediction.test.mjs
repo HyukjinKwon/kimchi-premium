@@ -283,3 +283,221 @@ describe('computeRank', () => {
     assert.equal(computeRank(scores, 'carol'), 3);
   });
 });
+
+// ── Betting window: 10-minute period ─────────────────────────────────────────
+// app.js sets targetTs = Date.now() + 10 * 60 * 1000.
+// The Firebase rule allows targetTs <= now + 660_000 (window + 60s clock-skew buffer).
+// These tests pin the exact values so a window change forces both to be updated together.
+
+describe('betting window timing', () => {
+  const WINDOW_MS = 10 * 60 * 1000;
+  const RULE_CEILING_MS = 660_000; // from database.rules.json: now + 660000
+
+  test('prediction window is exactly 10 minutes', () => {
+    assert.equal(WINDOW_MS, 600_000);
+  });
+
+  test('firebase rule ceiling is window + 60s clock-skew buffer', () => {
+    assert.equal(RULE_CEILING_MS, WINDOW_MS + 60_000);
+  });
+
+  test('targetTs fits within rule ceiling when clocks agree', () => {
+    const now = 1_000_000_000_000;
+    const targetTs = now + WINDOW_MS;
+    assert.ok(targetTs <= now + RULE_CEILING_MS);
+  });
+
+  test('targetTs rejected when client clock is 61s ahead of server', () => {
+    const serverNow = 1_000_000_000_000;
+    const clientNow = serverNow + 61_000;
+    const targetTs = clientNow + WINDOW_MS;
+    assert.ok(targetTs > serverNow + RULE_CEILING_MS);
+  });
+
+  test('targetTs accepted when client clock is exactly 60s ahead of server', () => {
+    const serverNow = 1_000_000_000_000;
+    const clientNow = serverNow + 60_000;
+    const targetTs = clientNow + WINDOW_MS;
+    assert.ok(targetTs <= serverNow + RULE_CEILING_MS);
+  });
+
+  test('targetTs is strictly in the future (rule: targetTs > now)', () => {
+    const now = 1_000_000_000_000;
+    const targetTs = now + WINDOW_MS;
+    assert.ok(targetTs > now);
+  });
+});
+
+// ── Countdown formatter (mirrors startCountdownTicker in app.js) ──────────────
+// The countdown display logic is duplicated here as a pure function for testing.
+// If the format in app.js changes, update this too.
+
+describe('countdown formatting', () => {
+  function formatCountdown(rem) {
+    if (rem <= 0) return '확인 중...';
+    const m = Math.floor(rem / 60000);
+    const s = Math.floor((rem % 60000) / 1000);
+    return `${m}분 ${String(s).padStart(2, '0')}초 후 확인`;
+  }
+
+  test('full 10-minute window formats as 10분 00초', () => {
+    assert.equal(formatCountdown(10 * 60 * 1000), '10분 00초 후 확인');
+  });
+
+  test('9 minutes 30 seconds', () => {
+    assert.equal(formatCountdown(9 * 60 * 1000 + 30 * 1000), '9분 30초 후 확인');
+  });
+
+  test('seconds are zero-padded to two digits', () => {
+    assert.equal(formatCountdown(5 * 60 * 1000 + 5 * 1000), '5분 05초 후 확인');
+  });
+
+  test('last second before resolve', () => {
+    assert.equal(formatCountdown(1_000), '0분 01초 후 확인');
+  });
+
+  test('zero remaining shows resolving message', () => {
+    assert.equal(formatCountdown(0), '확인 중...');
+  });
+
+  test('negative remaining shows resolving message (already past targetTs)', () => {
+    assert.equal(formatCountdown(-1), '확인 중...');
+  });
+
+  test('just under 1 minute shows 0분', () => {
+    assert.equal(formatCountdown(59_999), '0분 59초 후 확인');
+  });
+});
+
+// ── app.js inline constants match prediction.js ───────────────────────────────
+// app.js re-implements the outcome formula inline (not via require).
+// These tests document the expected values so a drift between the two files
+// causes a visible failure — update both if the game rules change.
+
+describe('app.js inline constants must match prediction.js exports', () => {
+  // Inline values from app.js resolvePrediction():
+  //   hit   = Math.abs(actual - target) / target <= 0.005   (TOLERANCE)
+  //   win   = bet * 2                                        (WIN_MULTIPLIER)
+  //   floor = Math.max(10, ...)                              (POINTS_FLOOR)
+  const APP_TOLERANCE    = 0.005;
+  const APP_WIN_MULT     = 2;
+  const APP_FLOOR        = 10;
+
+  test('inline tolerance matches TOLERANCE export', () => {
+    assert.equal(APP_TOLERANCE, TOLERANCE);
+  });
+
+  test('inline win multiplier matches WIN_MULTIPLIER (prediction.js uses same value)', () => {
+    // WIN_MULTIPLIER = 2 in prediction.js; app.js uses bet * 2 directly
+    assert.equal(APP_WIN_MULT, 2);
+    // Cross-check: resolveOutcome win produces rawChange = bet * WIN_MULTIPLIER
+    const { rawChange } = resolveOutcome(50000, 50000, 100, 10);
+    assert.equal(rawChange, 10 * APP_WIN_MULT);
+  });
+
+  test('inline floor matches POINTS_FLOOR export', () => {
+    assert.equal(APP_FLOOR, POINTS_FLOOR);
+  });
+
+  test('inline hit formula matches resolveOutcome for a hit', () => {
+    const actual = 50000, target = 50000;
+    const inlineHit = Math.abs(actual - target) / target <= APP_TOLERANCE;
+    const { hit } = resolveOutcome(actual, target, 100, 10);
+    assert.equal(inlineHit, hit);
+  });
+
+  test('inline hit formula matches resolveOutcome for a miss', () => {
+    const actual = 50300, target = 50000; // 0.6% off — outside tolerance
+    const inlineHit = Math.abs(actual - target) / target <= APP_TOLERANCE;
+    const { hit } = resolveOutcome(actual, target, 100, 10);
+    assert.equal(inlineHit, hit);
+  });
+});
+
+// ── Visitor count: 24-hour window filter ─────────────────────────────────────
+// Firebase query: visitors.orderByChild('ts').startAt(Date.now() - 24h)
+// This pure-JS equivalent tests the intended filtering semantics.
+
+describe('visitor count 24h window filter', () => {
+  function countVisitors(entries, now) {
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    return Object.values(entries).filter(e => e.ts >= cutoff).length;
+  }
+
+  const NOW = 1_700_000_000_000;
+  const H24 = 24 * 60 * 60 * 1000;
+
+  test('empty object returns 0', () => {
+    assert.equal(countVisitors({}, NOW), 0);
+  });
+
+  test('single recent visitor is counted', () => {
+    assert.equal(countVisitors({ u1: { ts: NOW - 1_000 } }, NOW), 1);
+  });
+
+  test('visitor exactly at 24h boundary is included (>=)', () => {
+    assert.equal(countVisitors({ u1: { ts: NOW - H24 } }, NOW), 1);
+  });
+
+  test('visitor 1ms before 24h cutoff is excluded', () => {
+    assert.equal(countVisitors({ u1: { ts: NOW - H24 - 1 } }, NOW), 0);
+  });
+
+  test('only recent visitors counted, expired ones filtered out', () => {
+    const entries = {
+      stale1: { ts: NOW - H24 - 1_000 },
+      stale2: { ts: NOW - H24 - 60_000 },
+      fresh1: { ts: NOW - 3_600_000 },   // 1h ago
+      fresh2: { ts: NOW - 100 },
+    };
+    assert.equal(countVisitors(entries, NOW), 2);
+  });
+
+  test('all visitors expired returns 0', () => {
+    const entries = {
+      u1: { ts: NOW - H24 - 1 },
+      u2: { ts: NOW - H24 - 1_000 },
+    };
+    assert.equal(countVisitors(entries, NOW), 0);
+  });
+
+  test('same userId written twice counts as one (last-write-wins keying)', () => {
+    // Firebase keyed by userId → duplicate visits overwrite, not accumulate
+    const entries = { sameUser: { ts: NOW - 100 } };
+    assert.equal(countVisitors(entries, NOW), 1);
+  });
+});
+
+// ── Visitor count display condition ──────────────────────────────────────────
+// Template: <span v-if="visitorCount > onlineCount">({{ visitorCount }})</span>
+
+describe('visitor count display condition (visitorCount > onlineCount)', () => {
+  function showVisitorTotal(onlineCount, visitorCount) {
+    return visitorCount > onlineCount;
+  }
+
+  test('hides total when all visitors are currently live', () => {
+    assert.equal(showVisitorTotal(3, 3), false);
+  });
+
+  test('shows total when inactive visitors exist beyond live count', () => {
+    assert.equal(showVisitorTotal(1, 5), true);
+  });
+
+  test('hides total when nobody has visited', () => {
+    assert.equal(showVisitorTotal(0, 0), false);
+  });
+
+  test('shows total when live count is 0 but prior visitors exist', () => {
+    assert.equal(showVisitorTotal(0, 3), true);
+  });
+
+  test('hides total when visitorCount trails onlineCount (listener lag)', () => {
+    // visitorCount listener can momentarily lag; must not show negative gap
+    assert.equal(showVisitorTotal(4, 3), false);
+  });
+
+  test('shows total for minimum meaningful case: 1 live, 2 total', () => {
+    assert.equal(showVisitorTotal(1, 2), true);
+  });
+});

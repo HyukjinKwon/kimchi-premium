@@ -2,6 +2,7 @@
   "rules": {
     "messages": {
       ".read": true,
+      ".indexOn": ["ts"],
       "$messageId": {
         ".write": "newData.exists() || data.exists()",
         ".validate": "newData.hasChildren(['from', 'text', 'ts'])",
@@ -53,6 +54,7 @@
     },
     "visitors": {
       ".read": true,
+      ".indexOn": ["ts"],
       "$userId": {
         ".write": true,
         ".validate": "newData.hasChildren(['ts'])",
