@@ -214,7 +214,7 @@ createApp({
         return;
       }
 
-      const hit = Math.abs(actualPrice - targetPrice) / targetPrice <= 0.001;
+      const hit = Math.abs(actualPrice - targetPrice) / targetPrice <= 0.003;
       const rawChange = hit ? bet * 2 : -bet;
       if (hit) predScore.correct++;
       const pointsBefore = predScore.points;

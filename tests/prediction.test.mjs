@@ -127,28 +127,28 @@ describe('resolveOutcome', () => {
     assert.equal(hit, true);
   });
 
-  test('hit: actual within +0.1% of target', () => {
+  test('hit: actual within +0.3% of target', () => {
     const target = 50000;
     const actual = target * (1 + TOLERANCE); // exactly at the edge
     const { hit } = resolveOutcome(actual, target, 100, 10);
     assert.equal(hit, true);
   });
 
-  test('hit: actual within -0.1% of target', () => {
+  test('hit: actual within -0.3% of target', () => {
     const target = 50000;
     const actual = target * (1 - TOLERANCE);
     const { hit } = resolveOutcome(actual, target, 100, 10);
     assert.equal(hit, true);
   });
 
-  test('miss: actual just outside +0.1%', () => {
+  test('miss: actual just outside +0.3%', () => {
     const target = 50000;
-    const actual = target * (1 + TOLERANCE + 0.0001); // 0.11% off
+    const actual = target * (1 + TOLERANCE + 0.0001); // 0.31% off
     const { hit } = resolveOutcome(actual, target, 100, 10);
     assert.equal(hit, false);
   });
 
-  test('miss: actual just outside -0.1%', () => {
+  test('miss: actual just outside -0.3%', () => {
     const target = 50000;
     const actual = target * (1 - TOLERANCE - 0.0001);
     const { hit } = resolveOutcome(actual, target, 100, 10);
@@ -376,10 +376,10 @@ describe('countdown formatting', () => {
 
 describe('app.js inline constants must match prediction.js exports', () => {
   // Inline values from app.js resolvePrediction():
-  //   hit   = Math.abs(actual - target) / target <= 0.001   (TOLERANCE)
+  //   hit   = Math.abs(actual - target) / target <= 0.003   (TOLERANCE)
   //   win   = bet * 2                                        (WIN_MULTIPLIER)
   //   floor = Math.max(10, ...)                              (POINTS_FLOOR)
-  const APP_TOLERANCE    = 0.001;
+  const APP_TOLERANCE    = 0.003;
   const APP_WIN_MULT     = 2;
   const APP_FLOOR        = 10;
 
@@ -407,7 +407,7 @@ describe('app.js inline constants must match prediction.js exports', () => {
   });
 
   test('inline hit formula matches resolveOutcome for a miss', () => {
-    const actual = 50300, target = 50000; // 0.6% off — outside 0.1% tolerance
+    const actual = 50300, target = 50000; // 0.6% off — outside 0.3% tolerance
     const inlineHit = Math.abs(actual - target) / target <= APP_TOLERANCE;
     const { hit } = resolveOutcome(actual, target, 100, 10);
     assert.equal(inlineHit, hit);

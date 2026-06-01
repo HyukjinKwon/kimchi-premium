@@ -2,7 +2,7 @@
 // Extracted so it can be unit-tested without Vue or Firebase.
 
 const POINTS_FLOOR = 10;
-const TOLERANCE = 0.001; // ±0.1%
+const TOLERANCE = 0.003; // ±0.3%
 const WIN_MULTIPLIER = 2;
 
 /**
