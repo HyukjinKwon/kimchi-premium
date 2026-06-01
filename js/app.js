@@ -214,7 +214,7 @@ createApp({
         return;
       }
 
-      const hit = Math.abs(actualPrice - targetPrice) / targetPrice <= 0.005;
+      const hit = Math.abs(actualPrice - targetPrice) / targetPrice <= 0.001;
       const rawChange = hit ? bet * 2 : -bet;
       if (hit) predScore.correct++;
       const pointsBefore = predScore.points;
@@ -224,8 +224,8 @@ createApp({
       const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
       const earnStr = hit ? `+${actualChange}p 획득 (3x)` : `${actualChange}p 손실`;
       const resultText = hit
-        ? `${chatEmoji.value} ${chatDisplayName.value} 적중! ${symbol} 예측 $${fmt(targetPrice)} ±0.5% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`
-        : `${chatEmoji.value} ${chatDisplayName.value} 실패. ${symbol} 예측 $${fmt(targetPrice)} ±0.5% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`;
+        ? `${chatEmoji.value} ${chatDisplayName.value} 적중! ${symbol} 예측 $${fmt(targetPrice)} ±0.1% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`
+        : `${chatEmoji.value} ${chatDisplayName.value} 실패. ${symbol} 예측 $${fmt(targetPrice)} ±0.1% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`;
       const resultBold = `${earnStr} → 총 ${predScore.points}p`;
 
       predError.value = `${resultText} ${resultBold}`;
@@ -250,6 +250,19 @@ createApp({
         db.ref(`scores/${_userId}`).once('value', snap => {
           const d = snap.val();
           if (d) { predScore.correct = d.correct || 0; predScore.tries = d.tries || 0; predScore.points = d.points || 10; predScore.ts = d.ts || 0; }
+          // Load pending prediction only after scores are loaded to avoid racing
+          // predScore.points=10 (initial) against a resolution that uses the real balance.
+          db.ref(`predictions/${_userId}`).once('value', snap2 => {
+            const d2 = snap2.val();
+            if (!d2) return;
+            predPending.value = { symbol: d2.symbol, targetPrice: d2.targetPrice, targetTs: d2.targetTs, bet: d2.bet || 0 };
+            if (Date.now() >= d2.targetTs) {
+              resolvePrediction();
+            } else {
+              schedulePredictionResolve(d2.targetTs);
+              startCountdownTicker();
+            }
+          });
         });
         db.ref('settings/pointsReset').on('value', snap => {
           const d = snap.val();
@@ -259,17 +272,6 @@ createApp({
           predScore.points = d.points;
           predScore.ts = d.ts;
           try { db.ref(`scores/${_userId}`).set({ points: d.points, correct: 0, tries: 0, ts: d.ts }); } catch(e) {}
-        });
-        db.ref(`predictions/${_userId}`).once('value', snap => {
-          const d = snap.val();
-          if (!d) return;
-          predPending.value = { symbol: d.symbol, targetPrice: d.targetPrice, targetTs: d.targetTs, bet: d.bet || 0 };
-          if (Date.now() >= d.targetTs) {
-            resolvePrediction();
-          } else {
-            schedulePredictionResolve(d.targetTs);
-            startCountdownTicker();
-          }
         });
         db.ref('scores').on('value', snap => {
           const data = snap.val() || {};
