@@ -47,6 +47,7 @@ const ExchangeManager = (() => {
   async function fetchGlobal() {
     try {
       const r = await fetch('https://api.coingecko.com/api/v3/global');
+      if (r.status === 429) { setTimeout(fetchGlobal, 300000); return; }
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (d.data) {
