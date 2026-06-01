@@ -100,6 +100,10 @@ body {
   align-items: center;
   font-size: 12px;
   color: #bbb;
+  position: sticky;
+  top: 50px;
+  z-index: 99;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 .top-item { display: flex; align-items: center; gap: 5px; }
 .top-item span.val { color: #fff; font-weight: 500; }
