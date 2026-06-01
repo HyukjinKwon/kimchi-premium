@@ -11,13 +11,15 @@ Real-time tracker for the **Kimchi Premium (김치프리미엄)** — the price 
 - **Real-time prices** via WebSocket — Upbit and Binance stream simultaneously
 - **Kimchi premium** (%) and KRW gap for BTC and all common coins
 - **Exchange rates** — USD/KRW, JPY/KRW, USDT/KRW refreshed every minute
-- **BTC dominance** from CoinGecko
+- **BTC dominance** from Coinlore (CoinGecko fallback)
 - **Coinbase USD premium** vs Binance (BTC only)
 - **Coin table** — sortable by price, change, volume, or premium; All / Favorites tabs; coin search
 - **Coin detail panel** — price chart, liquidation heatmap, recent trades, 24h alarm
 - **TradingView charts** — BTC Dominance and USDT/KRW
 - **Live chat** — anonymous, rate-limited, powered by Firebase Realtime Database
 - **News feed** and **liquidation feed**
+- **Price prediction game** — bet on BTC direction in chat, with scoring and live leaderboard
+- **Sticky info bar** — USD/KRW, JPY/KRW, USDT/KRW, BTC Dominance pinned below nav while scrolling
 - **Night mode** with localStorage persistence
 - Fully **responsive** — desktop sidebar layout and mobile-optimized 5-column table
 
@@ -31,8 +33,8 @@ Real-time tracker for the **Kimchi Premium (김치프리미엄)** — the price 
 | Styling | Vanilla CSS, custom properties for theming |
 | Charts | TradingView Widget |
 | Price data | Upbit WebSocket + REST, Binance WebSocket + REST |
-| Exchange rate | open.er-api.com (exchangerate-api.com fallback) |
-| Market data | CoinGecko `/global` |
+| Exchange rate | Coinbase API (`/v2/exchange-rates`) |
+| Market data | Coinlore `/api/global/` (CoinGecko fallback) |
 | Chat / Presence | Firebase Realtime Database |
 | Hosting | Cloudflare Pages |
 
@@ -51,6 +53,8 @@ kimchi-premium/
 │   ├── exchanges.js    # WebSocket manager (Upbit, Binance, Coinbase, exchange rates)
 │   ├── app.js          # Vue app — state, table logic, chat, alarms, coin detail
 │   ├── charts.js       # TradingView widget mount/unmount helpers
+│   ├── tradeStream.js  # Coin detail real-time trade feed (Upbit WebSocket + REST)
+│   ├── prediction.js   # Price prediction game logic
 │   └── utils.js        # Pure formatting helpers (fmtKrw, fmtPct, fmtPremium, …)
 ├── tests/
 │   └── utils.test.mjs  # Node built-in test runner, ~60 unit tests for utils.js
@@ -91,8 +95,8 @@ Requires Node 20+. No additional packages needed.
 | Upbit KRW prices | Upbit WebSocket `wss://api.upbit.com/websocket/v1` | Real-time |
 | Binance USD prices | Binance WebSocket `wss://stream.binance.com:9443/ws/!miniTicker@arr` | Real-time |
 | Coinbase BTC price | Coinbase REST API | Every 5 s |
-| USD/KRW, JPY/KRW | open.er-api.com | Every 60 s |
-| BTC dominance | CoinGecko `/api/v3/global` | Every 2 min |
+| USD/KRW, JPY/KRW | Coinbase API `/v2/exchange-rates` | Every 60 s |
+| BTC dominance | Coinlore `/api/global/` (CoinGecko fallback) | Every 2 min |
 
 All data is fetched client-side. No backend server.
 
