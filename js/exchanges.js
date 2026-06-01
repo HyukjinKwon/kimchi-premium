@@ -43,7 +43,12 @@ const ExchangeManager = (() => {
     setTimeout(fetchExchangeRate, 3000);
   }
 
-  // --- BTC Dominance via CoinPaprika ---
+  // --- BTC Dominance via CoinPaprika (localStorage cache survives reloads) ---
+  const _cachedDominance = localStorage.getItem('btcDominance');
+  if (_cachedDominance) {
+    state.btcDominance = _cachedDominance;
+  }
+
   async function fetchGlobal() {
     try {
       const r = await fetch('https://api.coinpaprika.com/v1/global');
@@ -51,6 +56,7 @@ const ExchangeManager = (() => {
       const d = await r.json();
       if (d.bitcoin_dominance_percentage != null) {
         state.btcDominance = d.bitcoin_dominance_percentage.toFixed(1);
+        localStorage.setItem('btcDominance', state.btcDominance);
         emit('global', { btcDominance: state.btcDominance });
         setTimeout(fetchGlobal, 120000);
         return;
@@ -331,6 +337,7 @@ const ExchangeManager = (() => {
 
   async function init() {
     fetchExchangeRate();
+    if (state.btcDominance) emit('global', { btcDominance: state.btcDominance });
     fetchGlobal();
 
     // Show priority coins immediately while we fetch the full market list
