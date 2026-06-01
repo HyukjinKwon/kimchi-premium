@@ -43,25 +43,42 @@ const ExchangeManager = (() => {
     setTimeout(fetchExchangeRate, 3000);
   }
 
-  // --- BTC Dominance via CoinPaprika (localStorage cache survives reloads) ---
+  // --- BTC Dominance (localStorage cache survives reloads) ---
   const _cachedDominance = localStorage.getItem('btcDominance');
   if (_cachedDominance) {
     state.btcDominance = _cachedDominance;
   }
 
   async function fetchGlobal() {
-    try {
-      const r = await fetch('https://api.coinpaprika.com/v1/global');
-      if (!r.ok) throw new Error(r.status);
-      const d = await r.json();
-      if (d.bitcoin_dominance_percentage != null) {
-        state.btcDominance = d.bitcoin_dominance_percentage.toFixed(1);
-        localStorage.setItem('btcDominance', state.btcDominance);
-        emit('global', { btcDominance: state.btcDominance });
-        setTimeout(fetchGlobal, 120000);
-        return;
-      }
-    } catch(e) {}
+    // Try Coinlore first (no rate limits, closest to TradingView), fall back to CoinGecko
+    const sources = [
+      async () => {
+        const r = await fetch('https://api.coinlore.net/api/global/');
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        return d[0]?.btc_d ? parseFloat(d[0].btc_d).toFixed(1) : null;
+      },
+      async () => {
+        const r = await fetch('https://api.coingecko.com/api/v3/global');
+        if (r.status === 429) return null;
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        return d.data?.market_cap_percentage?.btc != null
+          ? d.data.market_cap_percentage.btc.toFixed(1) : null;
+      },
+    ];
+    for (const source of sources) {
+      try {
+        const val = await source();
+        if (val) {
+          state.btcDominance = val;
+          localStorage.setItem('btcDominance', val);
+          emit('global', { btcDominance: state.btcDominance });
+          setTimeout(fetchGlobal, 120000);
+          return;
+        }
+      } catch(e) {}
+    }
     setTimeout(fetchGlobal, 15000);
   }
 
