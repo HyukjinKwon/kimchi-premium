@@ -43,15 +43,14 @@ const ExchangeManager = (() => {
     setTimeout(fetchExchangeRate, 3000);
   }
 
-  // --- BTC Dominance via CoinGecko ---
+  // --- BTC Dominance via CoinPaprika ---
   async function fetchGlobal() {
     try {
-      const r = await fetch('https://api.coingecko.com/api/v3/global');
-      if (r.status === 429) { setTimeout(fetchGlobal, 300000); return; }
+      const r = await fetch('https://api.coinpaprika.com/v1/global');
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      if (d.data) {
-        state.btcDominance = d.data.market_cap_percentage.btc.toFixed(1);
+      if (d.bitcoin_dominance_percentage != null) {
+        state.btcDominance = d.bitcoin_dominance_percentage.toFixed(1);
         emit('global', { btcDominance: state.btcDominance });
         setTimeout(fetchGlobal, 120000);
         return;
