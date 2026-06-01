@@ -31,6 +31,22 @@ const ExchangeManager = (() => {
   // --- USD/KRW exchange rate ---
   async function fetchExchangeRate() {
     try {
+      const [rusd, rjpy] = await Promise.all([
+        fetch('https://query1.finance.yahoo.com/v8/finance/chart/USDKRW=X'),
+        fetch('https://query1.finance.yahoo.com/v8/finance/chart/JPYKRW=X'),
+      ]);
+      const [dusd, djpy] = await Promise.all([rusd.json(), rjpy.json()]);
+      const usdKrw = dusd.chart.result[0].meta.regularMarketPrice;
+      const jpyKrw = djpy.chart.result[0].meta.regularMarketPrice;
+      if (usdKrw && jpyKrw) {
+        state.usdKrw = usdKrw;
+        state.jpyKrw = jpyKrw;
+        emit('rate', { usdKrw: state.usdKrw, jpyKrw: state.jpyKrw });
+        setTimeout(fetchExchangeRate, 3000);
+        return;
+      }
+    } catch(e) {}
+    try {
       const r = await fetch('https://open.er-api.com/v6/latest/USD');
       const d = await r.json();
       if (d.rates) {
@@ -38,16 +54,16 @@ const ExchangeManager = (() => {
         state.jpyKrw = d.rates.KRW / d.rates.JPY;
         emit('rate', { usdKrw: state.usdKrw, jpyKrw: state.jpyKrw });
       }
-    } catch(e) {
+    } catch(e2) {
       try {
         const r2 = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
         const d2 = await r2.json();
         state.usdKrw = d2.rates.KRW;
         state.jpyKrw = d2.rates.KRW / d2.rates.JPY;
         emit('rate', { usdKrw: state.usdKrw, jpyKrw: state.jpyKrw });
-      } catch(e2) {}
+      } catch(e3) {}
     }
-    setTimeout(fetchExchangeRate, 60000);
+    setTimeout(fetchExchangeRate, 3000);
   }
 
   // --- BTC Dominance via CoinGecko ---

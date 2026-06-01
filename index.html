@@ -126,7 +126,7 @@
   <div id="topBar">
     <div class="top-item">
       <span>💵 USD/KRW</span>
-      <span class="val">{{ usdKrw ? usdKrw.toLocaleString(undefined,{maximumFractionDigits:0}) : '--' }}₩</span>
+      <span class="val">{{ usdKrw ? usdKrw.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '--' }}₩</span>
     </div>
     <div class="top-item">
       <span>💴 JPY/KRW</span>
