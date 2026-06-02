@@ -237,7 +237,7 @@ createApp({
       const actualChange = predScore.points - pointsBefore;
 
       const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
-      const earnStr = hit ? `+${actualChange}p 획득 (3x)` : `${actualChange}p 손실`;
+      const earnStr = hit ? `+${actualChange}p 획득 (2x)` : `${actualChange}p 손실`;
       const resultText = hit
         ? `${chatEmoji.value} ${chatDisplayName.value} 적중! ${symbol} 예측 $${fmt(targetPrice)} ±0.3% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`
         : `${chatEmoji.value} ${chatDisplayName.value} 실패. ${symbol} 예측 $${fmt(targetPrice)} ±0.3% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`;
@@ -296,7 +296,7 @@ createApp({
     }
 
     watch(predRank, (newRank, oldRank) => {
-      if (newRank === 1 && oldRank !== 1) {
+      if (newRank === 1 && oldRank !== null && oldRank !== 1) {
         predError.value = '🏆 1등이 되었습니다! 다른 사용자의 메시지를 삭제할 수 있습니다.';
         setTimeout(() => { predError.value = ''; }, 5000);
       }
