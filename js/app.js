@@ -124,13 +124,17 @@ createApp({
           if (!snap.val()) return;
           const presenceRef = db.ref(`presence/${sessionId}`);
           presenceRef.onDisconnect().remove(); // auto-remove when tab closes
-          presenceRef.set({ name: chatName.value, emoji: chatEmoji.value, ts: Date.now() });
+          presenceRef.set({ name: chatName.value, emoji: chatEmoji.value, uid: _userId, ts: Date.now() });
           // Record visit timestamp for 24h visitor window (keyed by persistent userId)
           db.ref(`visitors/${_userId}`).set({ ts: Date.now() });
         });
 
         db.ref('presence').on('value', (snap) => {
           onlineCount.value = snap.numChildren();
+          const ids = new Set();
+          snap.forEach(child => { const d = child.val(); if (d?.uid) ids.add(d.uid); });
+          _presenceActiveIds = ids;
+          recomputeRank();
         });
 
         // ── 24-hour visitor count ──────────────────────────────────────────
@@ -169,6 +173,17 @@ createApp({
     const predRank      = ref(null);
     let _predResolveTimer = null;
     let _predCountdownInterval = null;
+    let _rawScores = {};
+    let _presenceActiveIds = new Set();
+
+    function recomputeRank() {
+      const list = Object.entries(_rawScores)
+        .map(([id, s]) => ({ id, points: s.points || 0, tries: s.tries || 0 }))
+        .filter(s => s.tries > 0 && s.points > 10 && _presenceActiveIds.has(s.id))
+        .sort((a, b) => b.points - a.points || a.tries - b.tries);
+      const idx = list.findIndex(s => s.id === _userId);
+      predRank.value = idx >= 0 ? idx + 1 : null;
+    }
 
     const chatDisplayName = computed(() => {
       const rank = predRank.value ? ` #${predRank.value}` : '';
@@ -224,8 +239,8 @@ createApp({
       const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
       const earnStr = hit ? `+${actualChange}p 획득 (3x)` : `${actualChange}p 손실`;
       const resultText = hit
-        ? `${chatEmoji.value} ${chatDisplayName.value} 적중! ${symbol} 예측 $${fmt(targetPrice)} ±0.1% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`
-        : `${chatEmoji.value} ${chatDisplayName.value} 실패. ${symbol} 예측 $${fmt(targetPrice)} ±0.1% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`;
+        ? `${chatEmoji.value} ${chatDisplayName.value} 적중! ${symbol} 예측 $${fmt(targetPrice)} ±0.3% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`
+        : `${chatEmoji.value} ${chatDisplayName.value} 실패. ${symbol} 예측 $${fmt(targetPrice)} ±0.3% → 실제 $${fmt(actualPrice)} | 배팅 ${bet}p`;
       const resultBold = `${earnStr} → 총 ${predScore.points}p`;
 
       predError.value = `${resultText} ${resultBold}`;
@@ -274,13 +289,8 @@ createApp({
           try { db.ref(`scores/${_userId}`).set({ points: d.points, correct: 0, tries: 0, ts: d.ts }); } catch(e) {}
         });
         db.ref('scores').on('value', snap => {
-          const data = snap.val() || {};
-          const list = Object.entries(data)
-            .map(([id, s]) => ({ id, points: s.points || 0, tries: s.tries || 0 }))
-            .filter(s => s.tries > 0 && s.points > 10)
-            .sort((a, b) => b.points - a.points || a.tries - b.tries);
-          const idx = list.findIndex(s => s.id === _userId);
-          predRank.value = idx >= 0 ? idx + 1 : null;
+          _rawScores = snap.val() || {};
+          recomputeRank();
         });
       } catch(e) {}
     }

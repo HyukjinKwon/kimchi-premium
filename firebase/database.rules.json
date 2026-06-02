@@ -24,6 +24,7 @@
         ".validate": "newData.hasChildren(['name', 'ts'])",
         "name":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
         "emoji": { ".validate": "newData.isString() && newData.val().length <= 10" },
+        "uid":   { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 50" },
         "ts":    { ".validate": "newData.isNumber()" },
         "$other": { ".validate": false }
       }

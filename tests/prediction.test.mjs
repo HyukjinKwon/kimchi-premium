@@ -468,6 +468,114 @@ describe('visitor count 24h window filter', () => {
   });
 });
 
+// ── Active-user rank filtering (mirrors recomputeRank in app.js) ─────────────
+// recomputeRank only includes users present in _presenceActiveIds.
+// This pure equivalent allows unit testing without Firebase or Vue.
+
+describe('recomputeRank — active-user filtering', () => {
+  function recomputeRankForActive(scores, userId, activeIds) {
+    const list = Object.entries(scores)
+      .map(([id, s]) => ({ id, points: s.points || 0, tries: s.tries || 0 }))
+      .filter(s => s.tries > 0 && s.points > POINTS_FLOOR && activeIds.has(s.id))
+      .sort((a, b) => b.points - a.points || a.tries - b.tries);
+    const idx = list.findIndex(s => s.id === userId);
+    return idx >= 0 ? idx + 1 : null;
+  }
+
+  test('returns null when no users are active', () => {
+    const scores = { user1: { points: 200, tries: 5 } };
+    assert.equal(recomputeRankForActive(scores, 'user1', new Set()), null);
+  });
+
+  test('inactive rank-1 player gets no rank', () => {
+    const scores = {
+      user1: { points: 200, tries: 5 },
+      user2: { points: 100, tries: 3 },
+    };
+    // user1 is offline; only user2 is active
+    const active = new Set(['user2']);
+    assert.equal(recomputeRankForActive(scores, 'user1', active), null);
+    assert.equal(recomputeRankForActive(scores, 'user2', active), 1);
+  });
+
+  test('rank-2 becomes rank-1 when rank-1 goes inactive', () => {
+    const scores = {
+      leader: { points: 500, tries: 10 },
+      second: { points: 300, tries: 8 },
+    };
+    const active = new Set(['second']); // leader disconnected
+    assert.equal(recomputeRankForActive(scores, 'leader', active), null);
+    assert.equal(recomputeRankForActive(scores, 'second', active), 1);
+  });
+
+  test('rank-1 regains rank-1 when they reconnect', () => {
+    const scores = {
+      leader: { points: 500, tries: 10 },
+      second: { points: 300, tries: 8 },
+    };
+    const active = new Set(['leader', 'second']); // leader back online
+    assert.equal(recomputeRankForActive(scores, 'leader', active), 1);
+    assert.equal(recomputeRankForActive(scores, 'second', active), 2);
+  });
+
+  test('only active users are ranked — inactive high-scorer is skipped', () => {
+    const scores = {
+      ghost:  { points: 1000, tries: 50 }, // highest but offline
+      user1:  { points: 200,  tries: 5  },
+      user2:  { points: 100,  tries: 3  },
+    };
+    const active = new Set(['user1', 'user2']);
+    assert.equal(recomputeRankForActive(scores, 'ghost', active), null);
+    assert.equal(recomputeRankForActive(scores, 'user1', active), 1);
+    assert.equal(recomputeRankForActive(scores, 'user2', active), 2);
+  });
+
+  test('floor players are excluded even if active', () => {
+    const scores = {
+      user1: { points: POINTS_FLOOR, tries: 3 }, // at floor → excluded
+      user2: { points: 50, tries: 2 },
+    };
+    const active = new Set(['user1', 'user2']);
+    assert.equal(recomputeRankForActive(scores, 'user1', active), null);
+    assert.equal(recomputeRankForActive(scores, 'user2', active), 1);
+  });
+
+  test('tiebreak by tries still applies among active users', () => {
+    const scores = {
+      user1: { points: 100, tries: 10 },
+      user2: { points: 100, tries: 5 }, // fewer tries → higher rank
+    };
+    const active = new Set(['user1', 'user2']);
+    assert.equal(recomputeRankForActive(scores, 'user2', active), 1);
+    assert.equal(recomputeRankForActive(scores, 'user1', active), 2);
+  });
+
+  test('single active user out of many is rank 1', () => {
+    const scores = {
+      user1: { points: 500, tries: 20 },
+      user2: { points: 400, tries: 15 },
+      user3: { points: 300, tries: 10 },
+    };
+    const active = new Set(['user3']); // lowest scorer but only one online
+    assert.equal(recomputeRankForActive(scores, 'user3', active), 1);
+  });
+});
+
+// ── Result message tolerance display string ───────────────────────────────────
+// app.js posts "±0.3%" in chat messages. This must match the actual TOLERANCE.
+
+describe('result message tolerance label', () => {
+  const LABEL = '±0.3%';
+
+  test('label matches TOLERANCE constant (0.003 = 0.3%)', () => {
+    assert.equal(TOLERANCE * 100, parseFloat(LABEL.replace('±', '').replace('%', '')));
+  });
+
+  test('label format is ±N.N%', () => {
+    assert.match(LABEL, /^±\d+\.?\d*%$/);
+  });
+});
+
 // ── Visitor count display condition ──────────────────────────────────────────
 // Template: <span v-if="visitorCount > onlineCount">({{ visitorCount }})</span>
 
