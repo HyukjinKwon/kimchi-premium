@@ -104,4 +104,6 @@ All data is fetched client-side. No backend server.
 
 ## License
 
-MIT
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
+
+You are free to use, modify, and distribute this code, but any modified version — including one run as a web service — must also be released under AGPL-3.0 with its source code publicly available.
