@@ -167,7 +167,7 @@ body {
     border-top: 1px solid var(--border);
   }
   .news-panel { height: auto; max-height: 280px; }
-  .chat-section { height: 560px; flex: none; }
+  .chat-section { height: 680px; flex: none; }
 }
 
 /* PREMIUM CARD */
