@@ -106,6 +106,13 @@ createApp({
 
     const onlineCount = ref(0);
     const visitorCount = ref(0);
+    const totalVisitorCount = ref(0);
+
+    // Eligibility thresholds scale with total (all-time) visitors instead of
+    // fixed constants: 10p per visitor to request KIMP, 100p per visitor to
+    // reset everyone's points.
+    const kimpThreshold  = computed(() => totalVisitorCount.value * 10);
+    const resetThreshold = computed(() => totalVisitorCount.value * 100);
 
     // Tab-scoped session ID for chat presence; persistent user ID for betting/scores
     const _sessionId = sessionStorage.getItem('chatSession') || Math.random().toString(36).slice(2);
@@ -142,6 +149,11 @@ createApp({
           visitorCount.value = snap.numChildren();
         });
 
+        // ── Total (all-time) visitor count — drives eligibility thresholds ──
+        db.ref('visitors').on('value', (snap) => {
+          totalVisitorCount.value = snap.numChildren();
+        });
+
         // ── Messages ───────────────────────────────────────────────────────
         const since = Date.now() - 24 * 60 * 60 * 1000;
         db.ref('messages').orderByChild('ts').startAt(since).limitToLast(50).on('value', async (snap) => {
@@ -171,7 +183,7 @@ createApp({
     const predCountdown = ref('');
     const predScore     = reactive({ correct: 0, tries: 0, points: 10, ts: 0 });
     const predRank      = ref(null);
-    // KIMP claim (points → token). Eligible at >= 100,000 points.
+    // KIMP claim (points → token). Eligible at >= total visitors × 10 points.
     const kimpAddress   = ref('');
     const kimpClaiming  = ref(false);
     const kimpClaim     = ref(null);  // mirrors claims/{userId}: { address, status, ... }
@@ -411,8 +423,8 @@ createApp({
     async function claimKimp() {
       const addr = kimpAddress.value.trim();
       // Like the chat/betting errors — show an inline message instead of hiding the button.
-      if (predScore.points < 100000) {
-        kimpError.value = `100,000p 이상 모아야 KIMP로 전환할 수 있어요. (현재 ${predScore.points.toLocaleString()}p)`;
+      if (predScore.points < kimpThreshold.value) {
+        kimpError.value = `${kimpThreshold.value.toLocaleString()}p 이상 모아야 KIMP로 전환할 수 있어요. (현재 ${predScore.points.toLocaleString()}p)`;
         setTimeout(() => { kimpError.value = ''; }, 4000);
         return;
       }
@@ -446,7 +458,7 @@ createApp({
     }
 
     async function resetAllPoints() {
-      if (predScore.points <= 1000000) return;
+      if (predScore.points <= resetThreshold.value) return;
       try {
         const db = getDb();
         await db.ref('settings/pointsReset').set({ ts: Date.now(), points: 10 });
@@ -1141,6 +1153,7 @@ createApp({
       sendChatMessage, saveNickname, deleteMessage, resetAllPoints,
       predSymbol, predSymbols, predPrice, predBet, predSubmitting, predError, predPending, predCountdown, predScore, predRank, submitPrediction,
       kimpAddress, kimpClaiming, kimpClaim, claimKimp, kimpRemaining, kimpError, showKimpInfo, showWalletGuide,
+      kimpThreshold, resetThreshold,
       status, favCoins, showFavOnly, alarms,
       initialLoading,
       sortKey, sortDir,

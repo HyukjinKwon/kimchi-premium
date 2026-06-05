@@ -407,13 +407,13 @@
           <a href="https://kaiascan.io/token/0xe27cf321234e5de9c1abb985532fe308e37bc9e2?tabId=tokenTransfer" target="_blank" rel="noopener">· KIMP 토큰 전송 내역 (KaiaScan) ↗</a>
           <div class="kimp-info-addr">KIMP 컨트랙트(토큰) 주소<br>0xe27Cf321234e5De9c1aBB985532fE308E37BC9e2</div>
         </div>
-        <!-- 전환 입력 (항상 표시; 100,000p 미만이면 클릭 시 오류 안내) -->
+        <!-- 전환 입력 (항상 표시; 임계치 미만이면 클릭 시 오류 안내) -->
         <div v-if="!kimpClaim || kimpClaim.status === 'paid' || kimpClaim.status === 'rejected' || kimpClaim.status === 'error'" class="kimp-claim-row">
           <input class="kimp-claim-input" v-model="kimpAddress" placeholder="Kaia 지갑 주소 (0x...)"
                  @keyup.enter="claimKimp" :disabled="kimpClaiming" />
           <button class="kimp-claim-btn" @click="claimKimp" :disabled="kimpClaiming">전환</button>
         </div>
-        <div class="kimp-airdrop-hint">현재 {{ Number(predScore.points).toLocaleString() }}p — 100,000p 이상 모으면 요청할 수 있어요.</div>
+        <div class="kimp-airdrop-hint">현재 {{ Number(predScore.points).toLocaleString() }}p — {{ Number(kimpThreshold).toLocaleString() }}p 이상 모으면 요청할 수 있어요.</div>
         <div v-if="kimpError" class="kimp-claim-status err">{{ kimpError }}</div>
 
         <!-- 상태 -->
@@ -486,7 +486,7 @@
                @keyup.enter="submitPrediction" :disabled="!!predPending" />
         <button class="pred-btn" @click="submitPrediction" :disabled="predSubmitting || !predPrice || !predBet || !!predPending">예측</button>
       </div>
-      <div v-if="predScore.points > 1000000" class="pred-admin-row">
+      <div v-if="predScore.points > resetThreshold" class="pred-admin-row">
         <button class="pred-reset-btn" @click="resetAllPoints">포인트 초기화 (→ 10p)</button>
       </div>
       <div v-if="predError" class="pred-error">{{ predError }}</div>
