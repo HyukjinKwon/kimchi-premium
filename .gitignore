@@ -1,1 +1,12 @@
 .claude/
+.DS_Store
+functions/node_modules/
+.firebase/
+*.log
+
+# Token (Python: web3.py + py-solc-x)
+token/.env
+token/__pycache__/
+token/.venv/
+token/serviceAccountKey.json
+token/payout.log

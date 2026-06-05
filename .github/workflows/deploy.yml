@@ -42,7 +42,6 @@ jobs:
           exclude: |
             .github
             tests
-            cloudflare
             firebase
             package.json
       - uses: actions/deploy-pages@v4

@@ -840,6 +840,90 @@ table.coin-table tbody tr.row-active > td:first-child { border-left: 3px solid #
   flex-shrink: 0;
 }
 
+/* KIMP airdrop panel */
+.kimp-airdrop {
+  margin: 8px 10px 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.06);
+  flex-shrink: 0;
+}
+.kimp-airdrop-head { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
+.kimp-airdrop-title { font-size: 11px; font-weight: 700; color: var(--text); }
+.kimp-token-badge {
+  margin-left: auto; font-size: 11px; font-weight: 700; color: #d62b1f;
+  text-decoration: none; border: 1px solid #d62b1f; border-radius: 6px; padding: 1px 6px;
+}
+.kimp-token-badge:hover { background: #d62b1f; color: #fff; }
+.kimp-airdrop-sub { font-size: 11px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+.kimp-airdrop-left { margin-left: auto; font-size: 10px; color: var(--text); white-space: nowrap; }
+.kimp-airdrop-left b { color: #2d9cdb; }
+.kimp-amount-link { text-decoration: none; }
+.kimp-amount-link:hover b { text-decoration: underline; }
+/* "KIMP" clickable word + info box (shown on click) */
+.kimp-info { color: #2d9cdb; font-weight: 700; cursor: pointer; border-bottom: 1px dotted #2d9cdb; }
+.kimp-info-box {
+  margin-top: 8px; padding: 9px 11px; font-size: 11px; line-height: 1.6;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.kimp-info-box .kimp-info-desc { color: var(--text); }
+.kimp-info-box a { color: #2d9cdb; text-decoration: none; }
+.kimp-info-box a:hover { text-decoration: underline; }
+.kimp-info-addr { font-size: 10px; color: var(--text-muted); word-break: break-all; margin-top: 2px; }
+.kimp-live-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #27ae60; margin-left: 4px; vertical-align: middle;
+  animation: kimp-pulse 1.6s infinite;
+}
+@keyframes kimp-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+.kimp-claim-row { display: flex; gap: 6px; margin-top: 8px; }
+.kimp-claim-input {
+  flex: 1; min-width: 0; padding: 8px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text); outline: none;
+}
+.kimp-claim-btn {
+  padding: 8px 12px; background: #2d9cdb; color: #fff; border: none;
+  border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; flex-shrink: 0;
+}
+.kimp-claim-btn:disabled { background: #aaa; cursor: default; }
+.kimp-claim-btn:not(:disabled):hover { background: #1a8fc7; }
+.kimp-airdrop-hint { font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+.kimp-claim-status { font-size: 11px; margin-top: 6px; color: var(--text-secondary); }
+.kimp-claim-status.ok { color: #27ae60; }
+.kimp-claim-status.err { color: #e74c3c; }
+.kimp-claim-status a, .kimp-links a, .kimp-guide a { color: #2d9cdb; }
+.kimp-details { margin-top: 7px; font-size: 11px; }
+.kimp-details summary { cursor: pointer; color: var(--text-muted); font-size: 10px; user-select: none; }
+.kimp-details summary:hover { color: var(--text); }
+.kimp-wallet-toggle { margin-top: 7px; font-size: 10px; }
+.kimp-links { display: flex; flex-direction: column; gap: 3px; margin: 5px 0 0 4px; }
+.kimp-links a { text-decoration: none; }
+.kimp-links a:hover { text-decoration: underline; }
+.kimp-contract { margin: 5px 0 0 4px; font-size: 10px; color: var(--text-muted); word-break: break-all; }
+.kimp-guide { margin: 5px 0 0; padding-left: 18px; color: var(--text-secondary); line-height: 1.55; font-size: 9.5px; }
+.kimp-guide code { background: var(--bg); padding: 1px 4px; border-radius: 4px; font-size: 10px; word-break: break-all; }
+.kimp-net {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 7px; margin: 4px 0; font-size: 10px; line-height: 1.6;
+  color: var(--text); word-break: break-all;
+}
+@media (max-width: 768px) {
+  .kimp-airdrop { margin: 8px 8px 4px; padding: 9px 10px; }
+  .kimp-airdrop-head { gap: 4px 8px; }
+  .kimp-airdrop-title { font-size: 11px; }
+  .kimp-airdrop-left { font-size: 10px; }
+  .kimp-claim-input { font-size: 16px; }   /* >=16px avoids iOS auto-zoom on focus */
+  .kimp-claim-btn { font-size: 13px; padding: 9px 14px; }
+  .kimp-info-box, .kimp-details { font-size: 12px; }
+  .kimp-info-box { max-height: 220px; overflow-y: auto; }  /* tall guide scrolls instead of squeezing chat */
+  .kimp-claim-input::placeholder { font-size: 13px; }
+}
+
 /* Prediction chat messages */
 /* System messages (predictions, deletions) */
 .msg-system-wrap {

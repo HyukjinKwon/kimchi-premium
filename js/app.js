@@ -156,7 +156,7 @@ createApp({
         });
       } catch(e) {
         console.error('[Chat] init failed:', e);
-        chatError.value = 'Chat unavailable. If you use an ad blocker, try allowing this site.';
+        chatError.value = '채팅을 불러올 수 없어요. 광고 차단(애드블록) 프로그램을 쓰고 있다면 이 사이트를 허용해 주세요.';
       }
     }
 
@@ -171,6 +171,14 @@ createApp({
     const predCountdown = ref('');
     const predScore     = reactive({ correct: 0, tries: 0, points: 10, ts: 0 });
     const predRank      = ref(null);
+    // KIMP claim (points → token). Eligible at >= 100,000 points.
+    const kimpAddress   = ref('');
+    const kimpClaiming  = ref(false);
+    const kimpClaim     = ref(null);  // mirrors claims/{userId}: { address, status, ... }
+    const kimpRemaining = ref(null);  // live on-chain KIMP balance of the payout wallet
+    const kimpError     = ref('');    // inline error in the airdrop panel
+    const showKimpInfo  = ref(false); // toggles the "KIMP" info box
+    const showWalletGuide = ref(false); // toggles the "지갑이 없으신가요?" how-to box
     let _predResolveTimer = null;
     let _predCountdownInterval = null;
     let _rawScores = {};
@@ -292,6 +300,18 @@ createApp({
           _rawScores = snap.val() || {};
           recomputeRank();
         });
+        let _prevClaimStatus = null;
+        db.ref(`claims/${_userId}`).on('value', snap => {
+          const c = snap.val();
+          kimpClaim.value = c;
+          // Mirror the server's score reset locally — but ONLY when a claim
+          // transitions to 'paid' this session, not when an old paid claim
+          // loads (otherwise a returning player's fresh points snap to 10).
+          if (c && c.status === 'paid' && _prevClaimStatus && _prevClaimStatus !== 'paid') {
+            predScore.points = 10; predScore.correct = 0; predScore.tries = 0;
+          }
+          _prevClaimStatus = c ? c.status : null;
+        });
       } catch(e) {}
     }
 
@@ -355,6 +375,68 @@ createApp({
         setTimeout(() => { predError.value = ''; }, 3000);
       } finally {
         predSubmitting.value = false;
+      }
+    }
+
+    // Live "airdrop pool remaining" = on-chain KIMP balance of the payout wallet.
+    const KIMP_CONTRACT_ADDR = '0xe27Cf321234e5De9c1aBB985532fE308E37BC9e2';
+    const KIMP_PAYOUT_WALLET = '0xAf6b4f06D6a3174B60cB3C2EAa6B0820504c6ADc';
+    const KAIA_RPCS = [
+      'https://public-en.node.kaia.io',
+      'https://kaia.drpc.org',
+      'https://kaia.blockpi.network/v1/rpc/public',
+    ];
+    async function fetchKimpRemaining() {
+      const data = '0x70a08231000000000000000000000000' + KIMP_PAYOUT_WALLET.slice(2).toLowerCase();
+      const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: KIMP_CONTRACT_ADDR, data }, 'latest'] });
+      for (const rpc of KAIA_RPCS) {
+        try {
+          const res = await fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          const j = await res.json();
+          if (j && j.result && j.result !== '0x') {
+            kimpRemaining.value = Number(BigInt(j.result) / (10n ** 18n));
+            console.info('[KIMP] remaining =', kimpRemaining.value, 'via', rpc);
+            return; // got it — stop trying fallbacks
+          }
+          console.warn('[KIMP] unexpected response from', rpc, j);
+        } catch (e) {
+          console.warn('[KIMP] fetch failed at', rpc, '—', e && e.message);
+        }
+      }
+      console.warn('[KIMP] all RPCs failed (likely an ad/privacy blocker, or page opened via file://).');
+    }
+
+    // Submit a request to convert points → KIMP. The payout (and points reset)
+    // happens server-side (payout.py reads the real score, sends KIMP, resets).
+    async function claimKimp() {
+      const addr = kimpAddress.value.trim();
+      // Like the chat/betting errors — show an inline message instead of hiding the button.
+      if (predScore.points < 100000) {
+        kimpError.value = `100,000p 이상 모아야 KIMP로 전환할 수 있어요. (현재 ${predScore.points.toLocaleString()}p)`;
+        setTimeout(() => { kimpError.value = ''; }, 4000);
+        return;
+      }
+      if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+        kimpError.value = '올바른 Kaia 지갑 주소를 입력하세요 (0x...).';
+        setTimeout(() => { kimpError.value = ''; }, 4000);
+        return;
+      }
+      kimpClaiming.value = true;
+      try {
+        const db = getDb();
+        await db.ref(`claims/${_userId}`).set({
+          address: addr,
+          status: 'pending',
+          points: predScore.points,
+          ts: Date.now(),
+        });
+        kimpAddress.value = '';
+        kimpError.value = '';
+      } catch (e) {
+        kimpError.value = '신청을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.';
+        setTimeout(() => { kimpError.value = ''; }, 4000);
+      } finally {
+        kimpClaiming.value = false;
       }
     }
 
@@ -1033,6 +1115,8 @@ createApp({
     // newsAge — defined in js/utils.js
 
     onMounted(async () => {
+      fetchKimpRemaining();                      // run immediately, independent of exchange init
+      setInterval(fetchKimpRemaining, 60000);    // refresh the live "remaining" every 60s
       ExchangeManager.on(handleExchangeEvent);
       await ExchangeManager.init();
       initialLoading.value = false;
@@ -1056,6 +1140,7 @@ createApp({
       chatName, chatEmoji, chatDisplayName, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount, visitorCount,
       sendChatMessage, saveNickname, deleteMessage, resetAllPoints,
       predSymbol, predSymbols, predPrice, predBet, predSubmitting, predError, predPending, predCountdown, predScore, predRank, submitPrediction,
+      kimpAddress, kimpClaiming, kimpClaim, claimKimp, kimpRemaining, kimpError, showKimpInfo, showWalletGuide,
       status, favCoins, showFavOnly, alarms,
       initialLoading,
       sortKey, sortDir,

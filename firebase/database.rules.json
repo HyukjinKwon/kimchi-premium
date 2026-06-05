@@ -73,6 +73,21 @@
         "$other": { ".validate": false }
       }
     },
+    "claims": {
+      "$userId": {
+        ".read": true,
+        ".write": "!data.exists() || data.child('status').val() == 'paid' || data.child('status').val() == 'rejected' || data.child('status').val() == 'error'",
+        ".validate": "newData.hasChildren(['address', 'status', 'ts'])",
+        "address":    { ".validate": "newData.isString() && newData.val().length == 42 && newData.val().beginsWith('0x')" },
+        "status":     { ".validate": "newData.isString() && newData.val().length <= 20" },
+        "points":     { ".validate": "newData.isNumber()" },
+        "paidPoints": { ".validate": "newData.isNumber()" },
+        "txHash":     { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "reason":     { ".validate": "newData.isString() && newData.val().length <= 200" },
+        "ts":         { ".validate": "newData.isNumber()" },
+        "$other":     { ".validate": false }
+      }
+    },
     "$other": { ".read": false, ".write": false }
   }
 }

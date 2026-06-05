@@ -19,6 +19,7 @@
     https://api.coingecko.com https://api.coinpaprika.com https://api.coinlore.net https://api.binance.com https://api.upbit.com
     https://api.coinbase.com https://api.exchange.coinbase.com https://open.er-api.com https://api.exchangerate-api.com
     https://www.okx.com https://min-api.cryptocompare.com https://api.rss2json.com
+    https://public-en.node.kaia.io https://kaia.drpc.org https://kaia.blockpi.network
     https://www.googletagmanager.com
     https://www.gstatic.com
     https://www.googleadservices.com https://*.google.com https://*.google.co.kr
@@ -392,8 +393,59 @@
       </div>
     </div>
     <div class="chat-sidebar-body">
+      <!-- KIMP 에어드랍 이벤트 -->
+      <div class="kimp-airdrop">
+        <div class="kimp-airdrop-head">
+          <span class="kimp-airdrop-title">포인트(p) → <span class="kimp-info" :class="{ open: showKimpInfo }" @click="showKimpInfo = !showKimpInfo">KIMP</span> 코인</span>
+          <span class="kimp-airdrop-left">잔여 <a class="kimp-amount-link" href="https://kaiascan.io/address/0xAf6b4f06D6a3174B60cB3C2EAa6B0820504c6ADc?tabId=txList&page=1" target="_blank" rel="noopener" title="남은 KIMP 잔여 (KaiaScan)"><b>{{ kimpRemaining === null ? '…' : Number(kimpRemaining).toLocaleString() }}</b></a> <span class="kimp-info" :class="{ open: showKimpInfo }" @click.stop="showKimpInfo = !showKimpInfo">KIMP</span><span v-if="kimpRemaining !== null" class="kimp-live-dot" title="실시간"></span></span>
+        </div>
+        <div v-if="showKimpInfo" class="kimp-info-box">
+          <div class="kimp-info-desc">KIMP는 실시간김프 커뮤니티를 위한 <b>밈코인</b>이에요. <b>Kaia 블록체인</b> 위에서 발행된 실제 토큰이고, 투자 목적이 아니며 가치를 보장하지 않아요.</div>
+          <a href="https://dexata.kr/#/?tokenA=0xe27cf321234e5de9c1abb985532fe308e37bc9e2&tokenB=&interval=5" target="_blank" rel="noopener">· 시세 (Dexata) ↗</a>
+          <a href="https://klayswap.com/ko/pool" target="_blank" rel="noopener">· KlaySwap 풀 ↗</a>
+          <a href="https://kaiascan.io/address/0xe27cf321234e5de9c1abb985532fe308e37bc9e2?tabId=txList&page=1" target="_blank" rel="noopener">· 컨트랙트 거래 내역 (KaiaScan) ↗</a>
+          <a href="https://kaiascan.io/token/0xe27cf321234e5de9c1abb985532fe308e37bc9e2?tabId=tokenTransfer" target="_blank" rel="noopener">· KIMP 토큰 전송 내역 (KaiaScan) ↗</a>
+          <div class="kimp-info-addr">KIMP 컨트랙트(토큰) 주소<br>0xe27Cf321234e5De9c1aBB985532fE308E37BC9e2</div>
+        </div>
+        <!-- 전환 입력 (항상 표시; 100,000p 미만이면 클릭 시 오류 안내) -->
+        <div v-if="!kimpClaim || kimpClaim.status === 'paid' || kimpClaim.status === 'rejected' || kimpClaim.status === 'error'" class="kimp-claim-row">
+          <input class="kimp-claim-input" v-model="kimpAddress" placeholder="Kaia 지갑 주소 (0x...)"
+                 @keyup.enter="claimKimp" :disabled="kimpClaiming" />
+          <button class="kimp-claim-btn" @click="claimKimp" :disabled="kimpClaiming">전환</button>
+        </div>
+        <div class="kimp-airdrop-hint">현재 {{ Number(predScore.points).toLocaleString() }}p — 100,000p 이상 모으면 요청할 수 있어요.</div>
+        <div v-if="kimpError" class="kimp-claim-status err">{{ kimpError }}</div>
+
+        <!-- 상태 -->
+        <div v-if="kimpClaim && (kimpClaim.status === 'pending' || kimpClaim.status === 'processing')" class="kimp-claim-status">⏳ KIMP 전송 처리 중…</div>
+        <div v-else-if="kimpClaim && kimpClaim.status === 'paid'" class="kimp-claim-status ok">
+          ✅ {{ Number(kimpClaim.paidPoints || 0).toLocaleString() }} KIMP 전송 완료!
+          <a v-if="kimpClaim.txHash" :href="'https://kaiascan.io/tx/' + kimpClaim.txHash" target="_blank" rel="noopener">거래 확인 ↗</a>
+        </div>
+        <div v-else-if="kimpClaim && kimpClaim.status === 'rejected'" class="kimp-claim-status err">❌ 요청 거절됨: {{ kimpClaim.reason }}</div>
+        <div v-else-if="kimpClaim && kimpClaim.status === 'error'" class="kimp-claim-status err">⚠️ 전송 오류 — 잠시 후 다시 시도해 주세요.</div>
+
+        <!-- 지갑 안내 -->
+        <div class="kimp-wallet-toggle"><span class="kimp-info" :class="{ open: showWalletGuide }" @click="showWalletGuide = !showWalletGuide">지갑이 없으신가요?</span></div>
+        <div v-if="showWalletGuide" class="kimp-info-box">
+          <ol class="kimp-guide">
+            <li><b>지갑 설치:</b> <a href="https://metamask.io/download/" target="_blank" rel="noopener">MetaMask</a> 또는 <a href="https://www.kaiawallet.io/" target="_blank" rel="noopener">Kaia Wallet</a> 를 설치하고 지갑을 만드세요.</li>
+            <li><b>Kaia 메인넷 추가</b> (MetaMask → 네트워크 → 수동 추가):
+              <div class="kimp-net">
+                네트워크 이름: Kaia Mainnet<br>
+                RPC URL: https://public-en.node.kaia.io<br>
+                체인 ID: 8217 · 통화 기호: KAIA<br>
+                탐색기: https://kaiascan.io
+              </div>
+            </li>
+            <li><b>KIMP 토큰 추가:</b> 토큰 가져오기 → 컨트랙트 주소 <code>0xe27Cf321234e5De9c1aBB985532fE308E37BC9e2</code> 붙여넣기.</li>
+            <li><b>주소 복사:</b> 지갑의 <code>0x…</code> 주소를 위 입력칸에 붙여넣고 <b>전환</b>을 누르세요.</li>
+          </ol>
+        </div>
+      </div>
+
       <div class="chat-messages" ref="chatScrollEl">
-        <div v-if="chatMessages.length === 0" class="chat-empty">No messages yet</div>
+        <div v-if="chatMessages.length === 0" class="chat-empty">아직 메세지가 없어요</div>
         <div v-for="m in chatMessages" :key="m.id"
              class="chat-msg"
              :class="[m.deleted || m.isPrediction ? 'msg-system-wrap' : (m.emoji === chatEmoji ? 'msg-own' : (m.fromTg ? 'msg-tg' : 'msg-web'))]">
@@ -442,7 +494,7 @@
         ⏳ {{ predPending.symbol }} ${{ Number(predPending.targetPrice).toLocaleString() }} · 배팅 {{ predPending.bet }}p — {{ predCountdown }}
       </div>
       <div class="chat-input-row">
-        <input class="chat-input" v-model="chatInput" placeholder="Type a message..."
+        <input class="chat-input" v-model="chatInput" placeholder="메세지 입력"
                maxlength="300" @keyup.enter="sendChatMessage" :disabled="chatSending"
                ref="chatInputEl" />
         <button class="chat-send-btn" @click="sendChatMessage" :disabled="chatSending || !chatInput.trim()">
