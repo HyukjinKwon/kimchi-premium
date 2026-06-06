@@ -106,13 +106,14 @@ createApp({
 
     const onlineCount = ref(0);
     const visitorCount = ref(0);
-    const totalVisitorCount = ref(0);
 
-    // Eligibility thresholds scale with total (all-time) visitors instead of
-    // fixed constants: 10p per visitor to request KIMP, 100p per visitor to
-    // reset everyone's points.
-    const kimpThreshold  = computed(() => totalVisitorCount.value * 10);
-    const resetThreshold = computed(() => totalVisitorCount.value * 100);
+    // Eligibility thresholds scale with the number of visitors in the rolling
+    // 24-hour window (NOT all-time) instead of fixed constants: 10p per visitor
+    // to request KIMP, 100p per visitor to reset everyone's points. Using the
+    // 24h count keeps the bar in step with the live visitor counter shown in
+    // the UI rather than climbing forever as the all-time total grows.
+    const kimpThreshold  = computed(() => visitorCount.value * 10);
+    const resetThreshold = computed(() => visitorCount.value * 100);
 
     // Tab-scoped session ID for chat presence; persistent user ID for betting/scores
     const _sessionId = sessionStorage.getItem('chatSession') || Math.random().toString(36).slice(2);
@@ -144,14 +145,9 @@ createApp({
           recomputeRank();
         });
 
-        // ── 24-hour visitor count ──────────────────────────────────────────
+        // ── 24-hour visitor count — drives eligibility thresholds ──────────
         db.ref('visitors').orderByChild('ts').startAt(Date.now() - 24 * 60 * 60 * 1000).on('value', (snap) => {
           visitorCount.value = snap.numChildren();
-        });
-
-        // ── Total (all-time) visitor count — drives eligibility thresholds ──
-        db.ref('visitors').on('value', (snap) => {
-          totalVisitorCount.value = snap.numChildren();
         });
 
         // ── Messages ───────────────────────────────────────────────────────
