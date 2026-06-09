@@ -592,9 +592,12 @@ createApp({
       const gen = ++tradeGeneration;
 
       if (exchange === 'upbit') {
-        // REST: initial load + refresh every 5 s until the WebSocket delivers its first
-        // real-time trade. Stops when WS works; keeps panel fresh when WS is blocked.
-        let _wsHasDelivered = false;
+        // The Upbit trade WS subscribes with isOnlyRealtime:true — it pushes only *new*
+        // trades, never a snapshot. So a quiet market (or a dropped/blocked WS) would
+        // leave the panel frozen. To keep it moving, the REST poll runs as a heartbeat
+        // every 5 s whenever the WS has been silent for >5 s, and Bithumb fills in while
+        // Upbit is unreachable entirely. _lastWsTradeAt is set only by live WS trades.
+        let _lastWsTradeAt = 0;
         let _upbitRestOk = false;
         function _fetchRestTrades() {
           fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
@@ -602,18 +605,19 @@ createApp({
             .then(list => {
               if (tradeGeneration !== gen || !Array.isArray(list) || !list.length) return;
               _upbitRestOk = true;
+              // Don't clobber a live WS stream that pushed within the last few seconds.
+              if (Date.now() - _lastWsTradeAt < 5000) return;
               recentTrades.value = parseUpbitRestTrades(list);
             })
             .catch(() => {});
         }
-        // Bithumb fallback: fills the panel only while Upbit hasn't delivered (e.g. when
-        // Upbit is geo-throttled). Real Upbit REST/WS data always overwrites it.
+        // Bithumb fallback: fills only until any real Upbit data (REST or WS) arrives.
         function _fetchBithumbTrades() {
-          if (_upbitRestOk || _wsHasDelivered) return;
+          if (_upbitRestOk || _lastWsTradeAt > 0) return;
           fetch(`https://api.bithumb.com/public/transaction_history/${symbol}_KRW?count=30`)
             .then(r => r.json())
             .then(d => {
-              if (tradeGeneration !== gen || _upbitRestOk || _wsHasDelivered) return;
+              if (tradeGeneration !== gen || _upbitRestOk || _lastWsTradeAt > 0) return;
               if (d.status !== '0000' || !Array.isArray(d.data)) return;
               const trades = parseBithumbRestTrades(d.data);
               if (trades.length) recentTrades.value = trades;
@@ -622,10 +626,12 @@ createApp({
         }
         _fetchRestTrades();
         _fetchBithumbTrades();
+        // Heartbeat: keep the panel fresh whenever the WS isn't actively streaming.
         const _restTimer = setInterval(() => {
-          if (tradeGeneration !== gen || _wsHasDelivered) { clearInterval(_restTimer); return; }
+          if (tradeGeneration !== gen) { clearInterval(_restTimer); return; }
+          if (Date.now() - _lastWsTradeAt < 5000) return; // WS streaming live — leave it alone
           _fetchRestTrades();
-          if (!_upbitRestOk) _fetchBithumbTrades();
+          if (!_upbitRestOk && _lastWsTradeAt === 0) _fetchBithumbTrades();
         }, 5000);
 
         const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
@@ -643,7 +649,7 @@ createApp({
             if (tradeGeneration !== gen) return;
             const trade = parseUpbitWsTrade(JSON.parse(new TextDecoder().decode(buf)));
             if (!trade) return;
-            _wsHasDelivered = true; // WS is live — stop the REST refresh loop
+            _lastWsTradeAt = Date.now(); // mark the WS as actively streaming
             _tradeBuf.push(trade);
             if (_tradeRaf === null) _tradeRaf = requestAnimationFrame(() => _flushTradeBuf(gen));
           } catch(e) {}
