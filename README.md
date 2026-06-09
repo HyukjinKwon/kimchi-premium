@@ -32,11 +32,11 @@ Real-time tracker for the **Kimchi Premium (김치프리미엄)** — the price 
 | UI framework | Vue 3 (CDN, Composition API) |
 | Styling | Vanilla CSS, custom properties for theming |
 | Charts | TradingView Widget |
-| Price data | Upbit WebSocket + REST, Binance WebSocket + REST |
+| Price data | Upbit WebSocket + REST (KRW), Binance WebSocket + REST (USD), Bithumb REST (temporary KRW fallback) |
 | Exchange rate | Coinbase API (`/v2/exchange-rates`) |
 | Market data | Coinlore `/api/global/` (CoinGecko fallback) |
 | Chat / Presence | Firebase Realtime Database |
-| Hosting | Cloudflare Pages |
+| Hosting | GitHub Pages (deployed via GitHub Actions) |
 
 No build step. No bundler. Open `index.html` in a browser and it works.
 
@@ -50,16 +50,18 @@ kimchi-premium/
 ├── css/
 │   └── style.css       # All styles, responsive breakpoints at 768px / 1024px
 ├── js/
-│   ├── exchanges.js    # WebSocket manager (Upbit, Binance, Coinbase, exchange rates)
+│   ├── exchanges.js    # Exchange data manager (Upbit list + prices, Binance, Coinbase, Bithumb price fallback, rates)
 │   ├── app.js          # Vue app — state, table logic, chat, alarms, coin detail
 │   ├── charts.js       # TradingView widget mount/unmount helpers
-│   ├── tradeStream.js  # Coin detail real-time trade feed (Upbit WebSocket + REST)
+│   ├── tradeStream.js  # Coin detail real-time trade feed (Upbit WebSocket + REST, Bithumb fallback)
 │   ├── prediction.js   # Price prediction game logic
 │   └── utils.js        # Pure formatting helpers (fmtKrw, fmtPct, fmtPremium, …)
-├── tests/
-│   └── utils.test.mjs  # Node built-in test runner, ~60 unit tests for utils.js
-├── firebase/           # Firebase security rules
-├── cloudflare/         # Cloudflare Pages config / redirects
+├── tests/              # Node built-in test runner (run with `npm test`)
+│   ├── utils.test.mjs       # formatting helpers
+│   ├── prediction.test.mjs  # prediction-game logic
+│   └── tradeStream.test.mjs # trade-feed + Bithumb parsers
+├── firebase/           # Firebase Realtime Database security rules
+├── .github/workflows/  # CI: run tests, then deploy to GitHub Pages on push to main
 └── package.json        # Only used for running tests (no dependencies)
 ```
 
@@ -78,7 +80,7 @@ For the **live chat** to work you need a Firebase project:
 
 ## Tests
 
-Unit tests cover all formatting utilities (`fmtKrw`, `fmtUsd`, `fmtPct`, `fmtPremium`, `fmtKrwGap`, `fmtVolume`, `fmtTradePrice`, `fmtLiqUsd`, `createRateLimiter`, etc.).
+Unit tests cover the formatting utilities (`fmtKrw`, `fmtUsd`, `fmtPct`, `fmtPremium`, `fmtKrwGap`, `fmtVolume`, `fmtTradePrice`, `fmtLiqUsd`, `createRateLimiter`, …), the price-prediction game logic, and the trade-stream / Bithumb parsers. They run in CI on every push and gate the GitHub Pages deploy.
 
 ```bash
 npm test
@@ -92,13 +94,17 @@ Requires Node 20+. No additional packages needed.
 
 | Data | Source | Refresh |
 |---|---|---|
-| Upbit KRW prices | Upbit WebSocket `wss://api.upbit.com/websocket/v1` | Real-time |
+| Coin list | Upbit `/v1/market/all` | On load (retried until it succeeds) |
+| Upbit KRW prices | Upbit WebSocket `wss://api.upbit.com/websocket/v1` + REST | Real-time |
+| Temporary KRW prices | Bithumb `/public/ticker/ALL_KRW` | On load, until Upbit prices arrive |
 | Binance USD prices | Binance WebSocket `wss://stream.binance.com:9443/ws/!miniTicker@arr` | Real-time |
 | Coinbase BTC price | Coinbase REST API | Every 5 s |
 | USD/KRW, JPY/KRW | Coinbase API `/v2/exchange-rates` | Every 60 s |
 | BTC dominance | Coinlore `/api/global/` (CoinGecko fallback) | Every 2 min |
 
-All data is fetched client-side. No backend server.
+The coin list is always Upbit's; Bithumb only supplies placeholder KRW prices until live
+Upbit data arrives (and as a fallback when Upbit is rate-limited). All data is fetched
+client-side — no backend server.
 
 ---
 
