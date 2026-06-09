@@ -183,6 +183,7 @@ createApp({
     const kimpAddress   = ref('');
     const kimpClaiming  = ref(false);
     const kimpClaim     = ref(null);  // mirrors claims/{userId}: { address, status, ... }
+    const kimpPaidHidden = ref(false); // auto-hides the '전송 완료' message ~10s after it appears
     const kimpRemaining = ref(null);  // live on-chain KIMP balance of the payout wallet
     const kimpError     = ref('');    // inline error in the airdrop panel
     const showKimpInfo  = ref(false); // toggles the "KIMP" info box
@@ -309,6 +310,7 @@ createApp({
           recomputeRank();
         });
         let _prevClaimStatus = null;
+        let _kimpPaidTimer = null;
         db.ref(`claims/${_userId}`).on('value', snap => {
           const c = snap.val();
           kimpClaim.value = c;
@@ -317,6 +319,16 @@ createApp({
           // loads (otherwise a returning player's fresh points snap to 10).
           if (c && c.status === 'paid' && _prevClaimStatus && _prevClaimStatus !== 'paid') {
             predScore.points = 10; predScore.correct = 0; predScore.tries = 0;
+          }
+          // Auto-dismiss the '전송 완료' confirmation ~10s after it first appears.
+          // A new claim cycle (status leaves 'paid') resets it so the next one shows.
+          if (c && c.status === 'paid') {
+            if (!_kimpPaidTimer) {
+              _kimpPaidTimer = setTimeout(() => { kimpPaidHidden.value = true; }, 10000);
+            }
+          } else {
+            if (_kimpPaidTimer) { clearTimeout(_kimpPaidTimer); _kimpPaidTimer = null; }
+            kimpPaidHidden.value = false;
           }
           _prevClaimStatus = c ? c.status : null;
         });
@@ -583,19 +595,37 @@ createApp({
         // REST: initial load + refresh every 5 s until the WebSocket delivers its first
         // real-time trade. Stops when WS works; keeps panel fresh when WS is blocked.
         let _wsHasDelivered = false;
+        let _upbitRestOk = false;
         function _fetchRestTrades() {
           fetch(`https://api.upbit.com/v1/trades/ticks?market=KRW-${symbol}&count=30`)
             .then(r => r.json())
             .then(list => {
-              if (tradeGeneration !== gen || !Array.isArray(list)) return;
+              if (tradeGeneration !== gen || !Array.isArray(list) || !list.length) return;
+              _upbitRestOk = true;
               recentTrades.value = parseUpbitRestTrades(list);
             })
             .catch(() => {});
         }
+        // Bithumb fallback: fills the panel only while Upbit hasn't delivered (e.g. when
+        // Upbit is geo-throttled). Real Upbit REST/WS data always overwrites it.
+        function _fetchBithumbTrades() {
+          if (_upbitRestOk || _wsHasDelivered) return;
+          fetch(`https://api.bithumb.com/public/transaction_history/${symbol}_KRW?count=30`)
+            .then(r => r.json())
+            .then(d => {
+              if (tradeGeneration !== gen || _upbitRestOk || _wsHasDelivered) return;
+              if (d.status !== '0000' || !Array.isArray(d.data)) return;
+              const trades = parseBithumbRestTrades(d.data);
+              if (trades.length) recentTrades.value = trades;
+            })
+            .catch(() => {});
+        }
         _fetchRestTrades();
+        _fetchBithumbTrades();
         const _restTimer = setInterval(() => {
           if (tradeGeneration !== gen || _wsHasDelivered) { clearInterval(_restTimer); return; }
           _fetchRestTrades();
+          if (!_upbitRestOk) _fetchBithumbTrades();
         }, 5000);
 
         const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
@@ -1126,7 +1156,7 @@ createApp({
       chatName, chatEmoji, chatDisplayName, chatEditingNick, chatInput, chatInputEl, chatMessages, chatSending, chatError, chatScrollEl, onlineCount, visitorCount,
       sendChatMessage, saveNickname, deleteMessage, resetAllPoints,
       predSymbol, predSymbols, predPrice, predBet, predSubmitting, predError, predPending, predCountdown, predScore, predRank, submitPrediction,
-      kimpAddress, kimpClaiming, kimpClaim, claimKimp, kimpRemaining, kimpError, showKimpInfo, showWalletGuide,
+      kimpAddress, kimpClaiming, kimpClaim, kimpPaidHidden, claimKimp, kimpRemaining, kimpError, showKimpInfo, showWalletGuide,
       kimpThreshold, resetThreshold,
       status, favCoins, showFavOnly, alarms,
       initialLoading,

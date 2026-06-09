@@ -56,6 +56,22 @@ function parseTvFrames(raw) {
   return results;
 }
 
+// Parses Bithumb transaction_history into trade-panel entries (newest first).
+// Used as a fallback in the Upbit Trades panel when Upbit REST/WS is geo-throttled.
+function parseBithumbRestTrades(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((t, i) => ({
+      id: `bithumb-${t.transaction_date}-${i}`,
+      price: parseFloat(t.price),
+      qty: parseFloat(t.units_traded),
+      isBuy: t.type === 'bid',
+      // transaction_date is KST (UTC+9) with no zone marker — make it explicit.
+      time: new Date(t.transaction_date.replace(' ', 'T') + '+09:00'),
+    }))
+    .reverse(); // Bithumb returns oldest-first; the panel shows newest-first
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { parseUpbitRestTrades, parseUpbitWsTrade, parseBinanceTrade, parseTvFrames };
+  module.exports = { parseUpbitRestTrades, parseUpbitWsTrade, parseBinanceTrade, parseTvFrames, parseBithumbRestTrades };
 }

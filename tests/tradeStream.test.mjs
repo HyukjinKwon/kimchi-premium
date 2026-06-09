@@ -8,6 +8,7 @@ const {
   parseUpbitWsTrade,
   parseBinanceTrade,
   parseTvFrames,
+  parseBithumbRestTrades,
 } = require('../js/tradeStream.js');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -184,6 +185,47 @@ describe('parseTvFrames', () => {
   test('chp missing defaults change to 0', () => {
     const raw = makeTvFrame({ m: 'qsd', p: ['s', { n: 'UPBIT:BTCKRW', s: 'ok', v: { lp: 100 } }] });
     assert.equal(parseTvFrames(raw)[0].change, 0);
+  });
+});
+
+// ── parseBithumbRestTrades ────────────────────────────────────────────────────
+
+describe('parseBithumbRestTrades', () => {
+  const sample = [
+    { transaction_date: '2026-06-09 19:27:38', type: 'bid', units_traded: '0.00060687', price: '93950000', total: '57015' },
+    { transaction_date: '2026-06-09 19:27:39', type: 'ask', units_traded: '0.00047538', price: '93940000', total: '44661' },
+  ];
+
+  test('reverses to newest-first (Bithumb returns oldest-first)', () => {
+    const r = parseBithumbRestTrades(sample);
+    assert.equal(r.length, 2);
+    assert.equal(r[0].price, 93940000); // the later trade comes first
+    assert.equal(r[1].price, 93950000);
+  });
+
+  test('maps bid to isBuy=true and ask to isBuy=false', () => {
+    const r = parseBithumbRestTrades(sample);
+    assert.equal(r[0].isBuy, false); // ask
+    assert.equal(r[1].isBuy, true);  // bid
+  });
+
+  test('parses price and qty as numbers', () => {
+    const r = parseBithumbRestTrades([sample[0]]);
+    assert.equal(r[0].price, 93950000);
+    assert.equal(r[0].qty, 0.00060687);
+  });
+
+  test('treats transaction_date as KST (UTC+9)', () => {
+    const r = parseBithumbRestTrades([sample[0]]);
+    assert.ok(r[0].time instanceof Date);
+    // 2026-06-09 19:27:38 KST === 10:27:38 UTC
+    assert.equal(r[0].time.toISOString(), '2026-06-09T10:27:38.000Z');
+  });
+
+  test('returns empty array for non-array input', () => {
+    assert.deepEqual(parseBithumbRestTrades(null), []);
+    assert.deepEqual(parseBithumbRestTrades(undefined), []);
+    assert.deepEqual(parseBithumbRestTrades({}), []);
   });
 });
 
