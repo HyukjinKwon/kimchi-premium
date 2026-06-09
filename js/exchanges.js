@@ -300,54 +300,41 @@ const ExchangeManager = (() => {
 
   const PRIORITY_SYMS = ['BTC','ETH','XRP','SOL','DOGE','ADA','AVAX','SHIB','SUI','LINK'];
 
-  // Authoritative Upbit symbol set — populated after fetchUpbitMarkets() succeeds.
-  // CryptoCompare polls use this to avoid emitting for coins not on Upbit.
+  // Authoritative Upbit symbol set — populated once fetchUpbitMarkets() succeeds.
+  // The Bithumb pre-fill uses it to avoid emitting coins not listed on Upbit.
   let _upbitValidSyms = null;
-  // Expands from PRIORITY_SYMS to all Upbit coins once the market list arrives.
-  let _ccAllSymbols = null;
 
-  // Pre-fill Upbit prices from CryptoCompare (CORS-open, free) so the hero card and
-  // top rows show something immediately. Real Upbit data replaces these within seconds.
-  async function fetchCryptoComparePrices(symbols) {
+  // Pre-fill Upbit prices from Bithumb (CORS-open, ~90 ms, no key) so the hero card and
+  // top rows show a realistic KRW price/premium immediately — and as a fallback when
+  // Upbit is geo-throttled. Bithumb is another KRW exchange, so its prices closely track
+  // Upbit; real Upbit REST/WS data overwrites these within ~100 ms. Only symbols confirmed
+  // on Upbit are emitted, so Bithumb-only coins never leak into the table.
+  async function fetchBithumbPrices(symbols) {
     if (!symbols.length) return;
-    // Once the market list is known, only request coins confirmed on Upbit.
-    const toFetch = _upbitValidSyms
-      ? symbols.filter(s => _upbitValidSyms.has(s))
-      : symbols;
-    if (!toFetch.length) return;
+    const allow = _upbitValidSyms ? symbols.filter(s => _upbitValidSyms.has(s)) : symbols;
+    if (!allow.length) return;
     try {
-      const r = await fetch(
-        `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${toFetch.join(',')}&tsyms=KRW&e=Upbit`
-      );
+      const r = await fetch('https://api.bithumb.com/public/ticker/ALL_KRW');
       if (!r.ok) return;
-      const { RAW } = await r.json();
-      if (!RAW) return;
-      // Emit removal for any fetched symbols not returned by CC — confirms they're not on Upbit.
-      const returnedSyms = new Set(Object.keys(RAW));
-      const notOnUpbit = toFetch.filter(s => !returnedSyms.has(s));
-      if (notOnUpbit.length) emit('symbols-remove', notOnUpbit);
-
-      for (const [symbol, currencies] of Object.entries(RAW)) {
-        const krw = currencies.KRW;
-        // After market list is known, skip coins not confirmed on Upbit.
-        if (_upbitValidSyms && !_upbitValidSyms.has(symbol)) continue;
-        // Skip if real Upbit data has arrived — Upbit REST/WS always sets high/low;
-        // CC never does, so high > 0 cleanly distinguishes real data from CC placeholders.
-        if (!krw?.PRICE || state.upbit[symbol]?.high > 0) continue;
+      const { status, data } = await r.json();
+      if (status !== '0000' || !data) return;
+      for (const sym of allow) {
+        const t = data[sym];
+        if (!t?.closing_price) continue;
+        // Skip if real Upbit data has arrived — Upbit REST/WS always sets high/low,
+        // which the Bithumb pre-fill never does, so high > 0 marks authoritative data.
+        if (state.upbit[sym]?.high > 0) continue;
+        const price = parseFloat(t.closing_price);
+        const prevClose = parseFloat(t.prev_closing_price);
         const d = {
-          price:  krw.PRICE,
-          // Upbit's signed_change_rate is change since KST midnight (UTC+9).
-          // CC's CHANGEPCTDAY is change since UTC midnight (= KST 09:00).
-          // CC's CHANGEPCT24HOUR is a rolling 24h window — furthest from Upbit.
-          // CHANGEPCTDAY is the closest available approximation without extra API calls.
-          change: (krw.CHANGEPCTDAY ?? krw.CHANGEPCT24HOUR ?? 0) / 100,
-          // CC volume (VOLUME24HOURTO / 1e8) shown as placeholder until real Upbit data arrives.
-          // Upbit REST/WS sets high > 0 which blocks CC updates, replacing this with accurate data.
-          volume: (krw.VOLUME24HOURTO ?? 0) / 1e8,
+          price,
+          // Approximate Upbit's since-KST-midnight change with Bithumb's day-over-day move.
+          change: prevClose > 0 ? (price - prevClose) / prevClose : 0,
+          // 24h traded value in KRW, scaled to 억 to match Upbit's volume units.
+          volume: parseFloat(t.acc_trade_value_24H || 0) / 1e8,
         };
-        state.upbit[symbol] = d;
-        // fromCC flag lets app.js distinguish placeholder events from real Upbit events.
-        emit('upbit', { symbol, data: d, prev: null, fromCC: true });
+        state.upbit[sym] = d;
+        emit('upbit', { symbol: sym, data: d, prev: null });
       }
     } catch(e) {}
   }
@@ -360,21 +347,18 @@ const ExchangeManager = (() => {
     // Show priority coins immediately while we fetch the full market list
     emit('symbols', PRIORITY_SYMS);
 
-    // Fill hero card prices from CryptoCompare before Upbit REST/WS connects
-    fetchCryptoComparePrices(PRIORITY_SYMS);
-
-    // Poll 3 more times in the first ~6 s so prices stay fresh until Upbit WS takes over.
-    // Polls are front-loaded: 1 s, 3 s, 6 s. Each poll skips symbols where real Upbit
-    // data (volume > 0) has already arrived.
-    [1000, 3000, 6000].forEach(delay =>
-      setTimeout(() => fetchCryptoComparePrices(_ccAllSymbols || PRIORITY_SYMS), delay)
-    );
+    // Seed the hero card / top rows instantly. Two sources race: Upbit's own ticker
+    // (~70 ms, authoritative) and Bithumb (~90 ms, CORS-open fallback for when Upbit is
+    // geo-throttled). Whichever real Upbit data arrives sets high > 0 and wins; the full
+    // market seed below follows once the market list resolves, then the WebSocket takes over.
+    fetchAllUpbitTickers(PRIORITY_SYMS);
+    fetchBithumbPrices(PRIORITY_SYMS);
 
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
     // Fire both in parallel.
     // Market list races against a 1.5 s timeout — fetchUpbitMarkets() retries 4× on
-    // CORS failure (3.2 s total), which would freeze the table at 10 coins far too long.
+    // failure (3.2 s total), which would freeze the table at 10 coins far too long.
     const upbitMarketsP = Promise.race([
       fetchUpbitMarkets(),
       new Promise(resolve => setTimeout(() => resolve([]), 1500)),
@@ -390,33 +374,21 @@ const ExchangeManager = (() => {
     const binancePrices = await binancePricesP; // already resolved by now
     const binancePriceSet = new Set(Object.keys(binancePrices));
 
-    let defaultSymbols;
-    if (upbitSymbols.length > 0) {
-      // Market list arrived: use it as the authoritative Upbit symbol set.
-      defaultSymbols = upbitSymbols;
-      _upbitValidSyms = new Set(defaultSymbols);
-      _ccAllSymbols   = defaultSymbols;
-    } else {
-      // Market list unavailable (CORS-blocked or timed out).
-      // Keep _upbitValidSyms=null so CC fetches use e=Upbit for self-filtering.
-      // Expand _ccAllSymbols to all Binance coins so CC polls cover the full universe.
-      defaultSymbols = PRIORITY_SYMS;
-      _ccAllSymbols  = [...binancePriceSet];
-      // Trigger CC for all non-priority Binance symbols — CC e=Upbit returns only
-      // Upbit-listed coins, and fromCC events expand allSymbols in app.js.
-      const nonPriority = [...binancePriceSet].filter(s => !PRIORITY_SYMS.includes(s));
-      if (nonPriority.length) fetchCryptoComparePrices(nonPriority);
-    }
+    // Market list arrived → use it as the authoritative Upbit symbol set.
+    // Otherwise fall back to the priority coins; the Upbit REST seed + WebSocket
+    // below fill in real prices and expand the table as data arrives.
+    const defaultSymbols = upbitSymbols.length > 0 ? upbitSymbols : PRIORITY_SYMS;
+    if (upbitSymbols.length > 0) _upbitValidSyms = new Set(defaultSymbols);
 
     const commonSymbols = defaultSymbols.filter(s => binancePriceSet.has(s));
     emit('symbols', commonSymbols);
 
-    // Fill non-priority coins from CryptoCompare while Upbit REST is in flight.
-    const remainingSyms = commonSymbols.filter(s => !PRIORITY_SYMS.includes(s));
-    if (remainingSyms.length) fetchCryptoComparePrices(remainingSyms);
+    // Pre-fill the non-priority rows from Bithumb while the full Upbit REST seed is in
+    // flight, so the table isn't empty if Upbit is slow/throttled. One ~90 ms call covers all.
+    fetchBithumbPrices(commonSymbols);
 
-    const upbitP = fetchAllUpbitTickers(defaultSymbols);
-    await upbitP;
+    // Seed all Upbit prices via a single REST call before the WebSocket takes over.
+    await fetchAllUpbitTickers(defaultSymbols);
 
     // Load heavy 24hr stats in background — updates change %, volume, high, low
     fetchBinanceMarkets().then(binanceData => {

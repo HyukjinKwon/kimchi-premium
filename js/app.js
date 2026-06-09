@@ -580,25 +580,6 @@ createApp({
       const gen = ++tradeGeneration;
 
       if (exchange === 'upbit') {
-        // CC 1-min bars: shown while no real Upbit data has arrived; refreshes every 30 s.
-        function _fetchCCBars() {
-          fetch(`https://min-api.cryptocompare.com/data/v2/histominute?fsym=${symbol}&tsym=KRW&limit=30&e=Upbit`)
-            .then(r => r.json())
-            .then(data => {
-              if (tradeGeneration !== gen) return;
-              if (recentTrades.value.length > 0 && recentTrades.value[0].qty > 0) return;
-              const bars = parseCryptoCompareBars(data);
-              if (bars.length) recentTrades.value = bars;
-            })
-            .catch(() => {});
-        }
-        _fetchCCBars();
-        const _ccBarTimer = setInterval(() => {
-          if (tradeGeneration !== gen) { clearInterval(_ccBarTimer); return; }
-          if (recentTrades.value[0]?.qty > 0) { clearInterval(_ccBarTimer); return; }
-          _fetchCCBars();
-        }, 30000);
-
         // REST: initial load + refresh every 5 s until the WebSocket delivers its first
         // real-time trade. Stops when WS works; keeps panel fresh when WS is blocked.
         let _wsHasDelivered = false;
@@ -841,9 +822,6 @@ createApp({
         Object.assign(status, data);
       } else if (event === 'symbols') {
         allSymbols.value = data.slice();
-      } else if (event === 'symbols-remove') {
-        const toRemove = new Set(data);
-        allSymbols.value = allSymbols.value.filter(s => !toRemove.has(s));
       } else if (event === 'upbit') {
         const { symbol, data: d, prev } = data;
         if (!prices[symbol]) prices[symbol] = {};
@@ -854,8 +832,8 @@ createApp({
           upbitVolume: d.volume,
           upDown,
         });
-        // CC events (fromCC=true) may also expand allSymbols: CC e=Upbit only returns
-        // coins on Upbit, so any symbol it emits is safe to add to the table.
+        // Upbit REST/WS may deliver coins not yet in the list (e.g. when the market
+        // list timed out) — every symbol here is on Upbit, so add it to the table.
         if (!allSymbols.value.includes(symbol)) allSymbols.value.push(symbol);
         updateUsdtKrw();
         checkAlarms();

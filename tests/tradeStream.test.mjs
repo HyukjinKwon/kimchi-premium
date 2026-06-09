@@ -8,7 +8,6 @@ const {
   parseUpbitWsTrade,
   parseBinanceTrade,
   parseTvFrames,
-  parseCryptoCompareBars,
 } = require('../js/tradeStream.js');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -20,14 +19,6 @@ function makeTvFrame(obj) {
 
 function tvQsd(tvSymbol, lp, chp = 0) {
   return makeTvFrame({ m: 'qsd', p: ['qs_test', { n: tvSymbol, s: 'ok', v: { lp, chp } }] });
-}
-
-function makeCCBar(time, open, close, volumefrom = 1) {
-  return { time, open, high: Math.max(open, close), low: Math.min(open, close), close, volumefrom, volumeto: close * volumefrom };
-}
-
-function makeCCResponse(bars) {
-  return { Response: 'Success', Data: { Data: bars } };
 }
 
 // ── parseUpbitRestTrades ──────────────────────────────────────────────────────
@@ -196,136 +187,55 @@ describe('parseTvFrames', () => {
   });
 });
 
-// ── parseCryptoCompareBars ────────────────────────────────────────────────────
+// ── Bithumb pre-fill guard semantics (documented via pure logic) ──────────────
 
-describe('parseCryptoCompareBars', () => {
-  test('parses bars newest-first', () => {
-    const bars = [
-      makeCCBar(1000, 100, 102),
-      makeCCBar(1060, 102, 105),
-      makeCCBar(1120, 105, 103),
-    ];
-    const result = parseCryptoCompareBars(makeCCResponse(bars));
-    assert.equal(result.length, 3);
-    assert.equal(result[0].id, 1120); // newest first
-    assert.equal(result[1].id, 1060);
-    assert.equal(result[2].id, 1000);
-  });
+describe('Bithumb pre-fill guard semantics', () => {
+  // These document the behaviour of fetchBithumbPrices in js/exchanges.js. Bithumb
+  // (another KRW exchange) pre-fills the hero card and table before live Upbit data
+  // arrives. It never sets high/low; Upbit REST/WS always does — so high>0 cleanly
+  // marks authoritative Upbit data and blocks further placeholder writes.
 
-  test('price is the candle close price', () => {
-    const result = parseCryptoCompareBars(makeCCResponse([makeCCBar(1000, 100, 109_500_000)]));
-    assert.equal(result[0].price, 109_500_000);
-  });
-
-  test('isBuy=true when close >= open (price rose)', () => {
-    const result = parseCryptoCompareBars(makeCCResponse([makeCCBar(1000, 100, 110)]));
-    assert.equal(result[0].isBuy, true);
-  });
-
-  test('isBuy=true when close === open (flat candle)', () => {
-    const result = parseCryptoCompareBars(makeCCResponse([makeCCBar(1000, 100, 100)]));
-    assert.equal(result[0].isBuy, true);
-  });
-
-  test('isBuy=false when close < open (price fell)', () => {
-    const result = parseCryptoCompareBars(makeCCResponse([makeCCBar(1000, 110, 100)]));
-    assert.equal(result[0].isBuy, false);
-  });
-
-  test('qty is always 0 (aggregate volume is not a trade-level quantity)', () => {
-    const bars = [makeCCBar(1000, 100, 102, 50), makeCCBar(1060, 102, 105, 200)];
-    const result = parseCryptoCompareBars(makeCCResponse(bars));
-    result.forEach(t => assert.equal(t.qty, 0));
-  });
-
-  test('time is a Date from bar.time seconds', () => {
-    const result = parseCryptoCompareBars(makeCCResponse([makeCCBar(1_700_000_000, 100, 101)]));
-    assert.ok(result[0].time instanceof Date);
-    assert.equal(result[0].time.getTime(), 1_700_000_000_000);
-  });
-
-  test('filters out bars with close === 0 (no data)', () => {
-    const bars = [makeCCBar(1000, 0, 0), makeCCBar(1060, 100, 102)];
-    const result = parseCryptoCompareBars(makeCCResponse(bars));
-    assert.equal(result.length, 1);
-    assert.equal(result[0].id, 1060);
-  });
-
-  test('limits to the last 30 bars', () => {
-    const bars = Array.from({ length: 50 }, (_, i) => makeCCBar(1000 + i * 60, 100, 101));
-    const result = parseCryptoCompareBars(makeCCResponse(bars));
-    assert.equal(result.length, 30);
-    // Should be the last 30 (newest), reversed to newest-first
-    assert.equal(result[0].id, 1000 + 49 * 60); // last bar = newest
-  });
-
-  test('returns empty array for null/undefined data', () => {
-    assert.deepEqual(parseCryptoCompareBars(null), []);
-    assert.deepEqual(parseCryptoCompareBars(undefined), []);
-    assert.deepEqual(parseCryptoCompareBars({}), []);
-  });
-
-  test('returns empty array when Data.Data is missing', () => {
-    assert.deepEqual(parseCryptoCompareBars({ Data: {} }), []);
-    assert.deepEqual(parseCryptoCompareBars({ Data: { Data: null } }), []);
-  });
-
-  test('returns empty array when all bars have close=0', () => {
-    const bars = [makeCCBar(1000, 0, 0), makeCCBar(1060, 0, 0)];
-    assert.deepEqual(parseCryptoCompareBars(makeCCResponse(bars)), []);
-  });
-
-  test('handles single bar correctly', () => {
-    const result = parseCryptoCompareBars(makeCCResponse([makeCCBar(5000, 200, 210)]));
-    assert.equal(result.length, 1);
-    assert.equal(result[0].price, 210);
-    assert.equal(result[0].isBuy, true);
-  });
-
-  test('id is the raw UNIX timestamp (seconds)', () => {
-    const result = parseCryptoCompareBars(makeCCResponse([makeCCBar(9999, 100, 101)]));
-    assert.equal(result[0].id, 9999);
-  });
-});
-
-// ── CryptoCompare guard semantics (documented via pure logic) ─────────────────
-
-describe('CryptoCompare fill guard semantics', () => {
-  // These tests document the expected behaviour of the high>0 guard used in
-  // fetchCryptoComparePrices. Upbit REST/WS always sets high/low (day range);
-  // CC never does — making high a clean discriminator between real data and placeholders.
-
-  test('no high field means CC placeholder (real Upbit data not yet arrived)', () => {
-    const ccData = { price: 100_000_000, change: 0.01, volume: 1234 }; // CC supplies volume
-    assert.equal(ccData.high, undefined);
-    assert.equal(ccData.high > 0, false); // guard allows CryptoCompare to update
+  test('no high field means Bithumb placeholder (real Upbit data not yet arrived)', () => {
+    const bithumbData = { price: 93_937_000, change: -0.0188, volume: 1234 };
+    assert.equal(bithumbData.high, undefined);
+    assert.equal(bithumbData.high > 0, false); // guard allows the Bithumb pre-fill to write
   });
 
   test('high>0 means real Upbit data has arrived (REST/WS sets high_price)', () => {
     const upbitData = { price: 100_500_000, change: 0.012, volume: 12345.6, high: 101_000_000, low: 99_000_000 };
-    assert.ok(upbitData.high > 0); // guard blocks further CryptoCompare updates
+    assert.ok(upbitData.high > 0); // guard blocks further Bithumb writes
   });
 
-  test('fromCC flag distinguishes placeholder events from real Upbit events', () => {
-    const ccEvent   = { symbol: 'BTC', data: { price: 100, change: 0, volume: 0 }, prev: null, fromCC: true };
-    const upbitEvent = { symbol: 'BTC', data: { price: 101, change: 0.01, volume: 5000, high: 102, low: 98 }, prev: null };
-    assert.equal(ccEvent.fromCC, true);
-    assert.equal(upbitEvent.fromCC, undefined); // real Upbit events never carry fromCC
+  test('change is the Bithumb day-over-day close move', () => {
+    const price = 93_937_000, prevClose = 95_742_000;
+    const change = prevClose > 0 ? (price - prevClose) / prevClose : 0;
+    assert.ok(Math.abs(change - (-0.018853)) < 1e-4);
   });
 
-  test('allSymbols should not grow from CryptoCompare events (fromCC guard)', () => {
+  test('change is 0 when prev close is missing or zero', () => {
+    const price = 100, prevClose = 0;
+    const change = prevClose > 0 ? (price - prevClose) / prevClose : 0;
+    assert.equal(change, 0);
+  });
+
+  test('only symbols confirmed on Upbit are pre-filled (Bithumb-only coins skipped)', () => {
+    const upbitValid = new Set(['BTC', 'ETH']);
+    const requested = ['BTC', 'ETH', 'BITHUMBONLY'];
+    const allow = upbitValid ? requested.filter(s => upbitValid.has(s)) : requested;
+    assert.deepEqual(allow, ['BTC', 'ETH']);
+  });
+
+  test('before the market list is known, all requested symbols are allowed', () => {
+    const upbitValid = null;
+    const requested = ['BTC', 'ETH', 'XRP'];
+    const allow = upbitValid ? requested.filter(s => upbitValid.has(s)) : requested;
+    assert.deepEqual(allow, ['BTC', 'ETH', 'XRP']);
+  });
+
+  test('allSymbols grows from any upbit event (the fromCC flag is gone)', () => {
     const allSymbols = ['BTC', 'ETH'];
-    // Simulate: CC emits for a non-Upbit coin
-    const event = { symbol: 'NONUPBIT', data: {}, prev: null, fromCC: true };
-    // App should NOT push when fromCC is true
-    if (!event.fromCC && !allSymbols.includes(event.symbol)) allSymbols.push(event.symbol);
-    assert.deepEqual(allSymbols, ['BTC', 'ETH']); // unchanged
-  });
-
-  test('allSymbols grows from real Upbit WS events (no fromCC)', () => {
-    const allSymbols = ['BTC', 'ETH'];
-    const event = { symbol: 'SOL', data: {}, prev: null }; // no fromCC
-    if (!event.fromCC && !allSymbols.includes(event.symbol)) allSymbols.push(event.symbol);
+    const event = { symbol: 'SOL', data: {}, prev: null };
+    if (!allSymbols.includes(event.symbol)) allSymbols.push(event.symbol);
     assert.deepEqual(allSymbols, ['BTC', 'ETH', 'SOL']); // SOL added
   });
 });
