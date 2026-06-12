@@ -318,12 +318,67 @@ const ExchangeManager = (() => {
     } catch(e) { return null; }
   }
 
+  // Upbit's Change % resets at 00:00 UTC (09:00 KST), but Bithumb's prev_closing_price
+  // resets at 00:00 KST — so a raw Bithumb day-over-day move uses a different baseline than
+  // Upbit and can even show the opposite sign. To match Upbit we need each coin's price at
+  // 00:00 UTC, which Bithumb exposes only through its per-symbol 1h candlestick (~400 KB,
+  // can't be trimmed). We fetch that lazily — only when Upbit is throttled — and cache it
+  // for the whole UTC day, since the baseline is fixed until the next 00:00 UTC.
+  let _utcOpen = { day: null, price: {} }; // { day: 'YYYY-MM-DD', price: { SYM: number|null } }
+  async function getUpbitDayOpen(sym) {
+    const day = new Date().toISOString().slice(0, 10);
+    if (_utcOpen.day !== day) _utcOpen = { day, price: {} };
+    if (sym in _utcOpen.price) return _utcOpen.price[sym];
+    let open = null;
+    try {
+      const r = await fetch(`https://api.bithumb.com/public/candlestick/${sym}_KRW/1h`);
+      if (r.ok) {
+        const { status, data } = await r.json();
+        if (status === '0000' && Array.isArray(data)) {
+          // Each row is [time(ms), open, close, high, low, volume]; the 00:00-UTC candle's
+          // open is the price at Upbit's daily reset.
+          const midnightUtc = Date.parse(day + 'T00:00:00.000Z');
+          const row = data.find(c => Number(c[0]) === midnightUtc);
+          if (row) open = parseFloat(row[1]);
+        }
+      }
+    } catch (e) { /* leave null — falls back to the day-over-day approximation */ }
+    _utcOpen.price[sym] = open; // cache misses too, so we don't refetch the heavy payload
+    return open;
+  }
+
+  // Re-emit Bithumb pre-fills with a Change % anchored to Upbit's 00:00-UTC reset, replacing
+  // the provisional day-over-day approximation. Skips any coin Upbit has already delivered,
+  // so it only does work (and pays the candlestick fetch) when Upbit is actually throttled.
+  async function refineBithumbChange(symbols) {
+    const data = await getBithumbData();
+    if (!data) return;
+    for (const sym of symbols) {
+      if (state.upbit[sym]?.high > 0) continue; // real Upbit data already arrived
+      const t = data[sym];
+      if (!t?.closing_price) continue;
+      const open = await getUpbitDayOpen(sym);
+      if (!(open > 0)) continue;
+      if (state.upbit[sym]?.high > 0) continue; // re-check after the await
+      const price = parseFloat(t.closing_price);
+      const d = {
+        price,
+        change: (price - open) / open,
+        volume: parseFloat(t.acc_trade_value_24H || 0) / 1e8,
+      };
+      state.upbit[sym] = d;
+      emit('upbit', { symbol: sym, data: d, prev: null });
+    }
+  }
+
   // Pre-fill Upbit prices from Bithumb (CORS-open, ~90 ms, no key) so the hero card and
   // top rows show a realistic KRW price/premium immediately — and as a fallback when
   // Upbit is geo-throttled. Bithumb is another KRW exchange, so its prices closely track
   // Upbit; real Upbit REST/WS data overwrites these within ~100 ms. Only symbols confirmed
   // on Upbit are emitted (when that set is known), so Bithumb-only coins don't leak in.
-  async function fetchBithumbPrices(symbols) {
+  // With accurate=true, the provisional Change % is refined to Upbit's 00:00-UTC baseline
+  // shortly after (see refineBithumbChange) for the small, scrutinized priority set.
+  async function fetchBithumbPrices(symbols, accurate = false) {
     if (!symbols.length) return;
     const allow = _upbitValidSyms ? symbols.filter(s => _upbitValidSyms.has(s)) : symbols;
     if (!allow.length) return;
@@ -336,11 +391,14 @@ const ExchangeManager = (() => {
         // which the Bithumb pre-fill never does, so high > 0 marks authoritative data.
         if (state.upbit[sym]?.high > 0) continue;
         const price = parseFloat(t.closing_price);
+        const open = _utcOpen.price[sym]; // exact Upbit baseline if already cached this UTC day
         const prevClose = parseFloat(t.prev_closing_price);
         const d = {
           price,
-          // Approximate Upbit's since-KST-midnight change with Bithumb's day-over-day move.
-          change: prevClose > 0 ? (price - prevClose) / prevClose : 0,
+          // Prefer Upbit's 00:00-UTC baseline; before it's cached, approximate with Bithumb's
+          // since-00:00-KST move (refined later by refineBithumbChange when accurate).
+          change: open > 0 ? (price - open) / open
+                : prevClose > 0 ? (price - prevClose) / prevClose : 0,
           // 24h traded value in KRW, scaled to 억 to match Upbit's volume units.
           volume: parseFloat(t.acc_trade_value_24H || 0) / 1e8,
         };
@@ -348,6 +406,10 @@ const ExchangeManager = (() => {
         emit('upbit', { symbol: sym, data: d, prev: null });
       }
     }
+    // Refine the Change % to Upbit's baseline once it's clear Upbit isn't filling these
+    // quickly. The ~1 s gate lets a healthy Upbit win first, so the candlestick fetch only
+    // happens under throttle.
+    if (accurate) setTimeout(() => refineBithumbChange(allow), 1000);
   }
 
   async function init() {
@@ -360,7 +422,7 @@ const ExchangeManager = (() => {
     // (~90 ms, CORS-open) is the temporary price fallback when Upbit is throttled.
     emit('symbols', PRIORITY_SYMS);
     fetchAllUpbitTickers(PRIORITY_SYMS);
-    fetchBithumbPrices(PRIORITY_SYMS);
+    fetchBithumbPrices(PRIORITY_SYMS, true);
     fetchBinancePriority(PRIORITY_SYMS); // quick 24hr stats for hero card
 
     // Fetch the Upbit coin list and Binance prices in parallel — the Upbit list is the
